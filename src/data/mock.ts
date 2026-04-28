@@ -75,15 +75,15 @@ export const AM_ROSTER: AMProfile[] = [
     email: "ttrivedi@vendasta.com",
     title: "Enterprise Account Manager, ISV",
     avatar: "TT",
-    quota: 310000,
-    achievedMRR: 314877,
+    quota: 302973,
+    achievedMRR: 314896,
     revenueTrend: [
       { week: "Oct 25", mrr: 325229 },
       { week: "Nov 25", mrr: 323416 },
       { week: "Dec 25", mrr: 315380 },
-      { week: "Jan 26", mrr: 301452 },
+      { week: "Jan 26", mrr: 302973 },
       { week: "Feb 26", mrr: 314779 },
-      { week: "Mar 26", mrr: 314877 },
+      { week: "Mar 26", mrr: 314896 },
     ],
     weeklyActions: [
       { id: 1, priority: "high", account: "Fiska Inc.", action: "MRR collapsed 64% in March ($2,973 → $1,083). Call Aisha Benali directly — don't email. Find out what happened before the rest cancels.", due: "Apr 28" },
@@ -102,7 +102,7 @@ export const AM_ROSTER: AMProfile[] = [
     email: "dkupietz@vendasta.com",
     title: "Head of Enterprise Expansion",
     avatar: "DK",
-    quota: 350000,
+    quota: 339845,
     achievedMRR: 371207,
     revenueTrend: [
       { week: "Oct 25", mrr: 263444 },
@@ -126,7 +126,7 @@ export const AM_ROSTER: AMProfile[] = [
     email: "astark@vendasta.com",
     title: "Enterprise Account Manager, Media and Broadcast",
     avatar: "AS",
-    quota: 280000,
+    quota: 232337,
     achievedMRR: 269090,
     revenueTrend: [
       { week: "Oct 25", mrr: 296910 },
