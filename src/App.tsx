@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { AMProvider } from "@/context/AMContext";
 import { Layout } from "@/components/layout/Layout";
 import Dashboard from "@/pages/Dashboard";
 import Accounts from "@/pages/Accounts";
@@ -10,6 +11,7 @@ import WeeklyBrief from "@/pages/WeeklyBrief";
 
 export default function App() {
   return (
+    <AMProvider>
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Layout />}>
@@ -23,5 +25,6 @@ export default function App() {
         </Route>
       </Routes>
     </BrowserRouter>
+    </AMProvider>
   );
 }

@@ -3,8 +3,9 @@ import { Header } from "@/components/layout/Header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ACCOUNTS, AI_ADOPTION_DATA } from "@/data/mock";
+import { AI_ADOPTION_DATA } from "@/data/mock";
 import { useNavigate } from "react-router-dom";
+import { useAM } from "@/context/AMContext";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Cell, PieChart, Pie, Legend
@@ -66,9 +67,10 @@ const OUTREACH_BY_VERTICAL: Record<string, { subject: string; hook: string; cta:
 
 export default function AIAdoption() {
   const navigate = useNavigate();
+  const { accounts } = useAM();
   const [selectedVertical, setSelectedVertical] = useState<string | null>(null);
 
-  const tierCounts = ACCOUNTS.reduce((acc, a) => {
+  const tierCounts = accounts.reduce((acc, a) => {
     acc[a.aiAdoption] = (acc[a.aiAdoption] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
@@ -79,12 +81,12 @@ export default function AIAdoption() {
     color: TIER_COLORS[tier as keyof typeof TIER_COLORS],
   }));
 
-  const noAiAccounts = ACCOUNTS.filter(a => a.aiAdoption === "none");
-  const basicAccounts = ACCOUNTS.filter(a => a.aiAdoption === "basic");
-  const verticals = [...new Set(ACCOUNTS.filter(a => a.aiAdoption === "none" || a.aiAdoption === "basic").map(a => a.vertical))];
+  const noAiAccounts = accounts.filter(a => a.aiAdoption === "none");
+  const basicAccounts = accounts.filter(a => a.aiAdoption === "basic");
+  const verticals = [...new Set(accounts.filter(a => a.aiAdoption === "none" || a.aiAdoption === "basic").map(a => a.vertical))];
 
   const targets = selectedVertical
-    ? ACCOUNTS.filter(a => a.vertical === selectedVertical && (a.aiAdoption === "none" || a.aiAdoption === "basic"))
+    ? accounts.filter(a => a.vertical === selectedVertical && (a.aiAdoption === "none" || a.aiAdoption === "basic"))
     : [...noAiAccounts, ...basicAccounts];
 
   return (
@@ -162,7 +164,7 @@ export default function AIAdoption() {
                       <div className="w-2 h-2 rounded-full" style={{ background: d.color }} />
                       <span className="text-muted-foreground">{d.name}</span>
                     </div>
-                    <span className="font-medium">{d.value} ({Math.round((d.value / ACCOUNTS.length) * 100)}%)</span>
+                    <span className="font-medium">{d.value} ({Math.round((d.value / accounts.length) * 100)}%)</span>
                   </div>
                 ))}
               </div>

@@ -4,8 +4,9 @@ import { Header } from "@/components/layout/Header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ACCOUNTS, ORG_ALERTS } from "@/data/mock";
+import { type Account, type OrgAlert } from "@/data/mock";
 import { formatDate, daysSince } from "@/lib/utils";
+import { useAM } from "@/context/AMContext";
 import {
   Send, Mail, Calendar, Sparkles, Copy, CheckCircle2,
   ChevronDown, ChevronRight, Clock, Target, Zap
@@ -19,11 +20,11 @@ interface OutreachStep {
   body?: string;
 }
 
-function generateOutreachPlan(accountId: string): { strategy: string; steps: OutreachStep[] } {
-  const account = ACCOUNTS.find(a => a.id === accountId);
+function generateOutreachPlan(accountId: string, accounts: Account[], orgAlerts: OrgAlert[]): { strategy: string; steps: OutreachStep[] } {
+  const account = accounts.find(a => a.id === accountId);
   if (!account) return { strategy: "", steps: [] };
 
-  const alert = ORG_ALERTS.find(a => a.accountId === accountId);
+  const alert = orgAlerts.find(a => a.accountId === accountId);
   const days = daysSince(account.lastMeeting);
   // First name only — handles "Jamie / Brad / Todd" style entries gracefully
   const firstName = account.contactName.split(/[\s/]/)[0].trim();
@@ -134,15 +135,16 @@ const CHANNEL_COLORS = { email: "text-v-blue", gchat: "text-v-green", call: "tex
 const CHANNEL_LABELS = { email: "Email", gchat: "GChat", call: "Phone Call", linkedin: "LinkedIn" };
 
 export default function OutreachPlanner() {
+  const { accounts, orgAlerts } = useAM();
   const [params] = useSearchParams();
-  const defaultAccountId = params.get("account") || ACCOUNTS[0].id;
+  const defaultAccountId = params.get("account") || accounts[0]?.id || "";
   const [selectedId, setSelectedId] = useState(defaultAccountId);
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
   const [expanded, setExpanded] = useState<number>(0);
 
-  const account = ACCOUNTS.find(a => a.id === selectedId) || ACCOUNTS[0];
-  const plan = generateOutreachPlan(account.id);
-  const alert = ORG_ALERTS.find(a => a.accountId === account.id);
+  const account = accounts.find(a => a.id === selectedId) || accounts[0];
+  const plan = generateOutreachPlan(account?.id || "", accounts, orgAlerts);
+  const alert = orgAlerts.find(a => a.accountId === account?.id);
 
   function copyBody(text: string, idx: number) {
     navigator.clipboard.writeText(text || "").then(() => {
@@ -160,7 +162,7 @@ export default function OutreachPlanner() {
           {/* Account Selector */}
           <div className="lg:w-64 shrink-0 space-y-1.5">
             <p className="text-xs font-semibold text-muted-foreground px-1 mb-2">SELECT ACCOUNT</p>
-            {ACCOUNTS.map(a => (
+            {accounts.map(a => (
               <button
                 key={a.id}
                 onClick={() => { setSelectedId(a.id); setExpanded(0); }}

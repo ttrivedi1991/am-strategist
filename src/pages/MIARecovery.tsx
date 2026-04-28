@@ -3,17 +3,18 @@ import { Header } from "@/components/layout/Header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ACCOUNTS } from "@/data/mock";
 import { formatDate, daysSince, formatCurrency } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
+import { useAM } from "@/context/AMContext";
 import {
   UserX, Clock, TrendingDown, AlertTriangle,
   Mail, Calendar, ArrowRight, Flame, MessageCircle
 } from "lucide-react";
+import { type Account } from "@/data/mock";
 
 const MIA_THRESHOLD = 45;
 
-function getRiskLevel(account: (typeof ACCOUNTS)[0]): "critical" | "high" | "medium" {
+function getRiskLevel(account: Account): "critical" | "high" | "medium" {
   const days = daysSince(account.lastMeeting);
   const declining = account.mrr < account.mrrPrev;
   if (days > 80 || account.health === "churning") return "critical";
@@ -21,7 +22,7 @@ function getRiskLevel(account: (typeof ACCOUNTS)[0]): "critical" | "high" | "med
   return "medium";
 }
 
-function getReEngagementHook(account: (typeof ACCOUNTS)[0]): string {
+function getReEngagementHook(account: Account): string {
   if (account.health === "churning") {
     return `${account.name} hasn't engaged in ${daysSince(account.lastMeeting)} days and revenue is declining. Send a personal video or executive escalation before they churn.`;
   }
@@ -37,7 +38,7 @@ function getReEngagementHook(account: (typeof ACCOUNTS)[0]): string {
   return `${account.contactName} hasn't responded in ${daysSince(account.lastMeeting)} days. A value-forward email with a specific stat about their account ("your reviews grew X%") tends to cut through.`;
 }
 
-function getReEngagementEmail(account: (typeof ACCOUNTS)[0]): string {
+function getReEngagementEmail(account: Account): string {
   const firstName = account.contactName.split(" ")[0];
   const days = daysSince(account.lastMeeting);
 
@@ -50,12 +51,13 @@ function getReEngagementEmail(account: (typeof ACCOUNTS)[0]): string {
 
 export default function MIARecovery() {
   const navigate = useNavigate();
+  const { accounts } = useAM();
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  const miaAccounts = ACCOUNTS.filter(a => a.isMIA || daysSince(a.lastMeeting) >= MIA_THRESHOLD)
+  const miaAccounts = accounts.filter(a => a.isMIA || daysSince(a.lastMeeting) >= MIA_THRESHOLD)
     .sort((a, b) => daysSince(b.lastMeeting) - daysSince(a.lastMeeting));
 
-  const watchlist = ACCOUNTS.filter(a =>
+  const watchlist = accounts.filter(a =>
     !a.isMIA &&
     daysSince(a.lastMeeting) >= 30 &&
     daysSince(a.lastMeeting) < MIA_THRESHOLD

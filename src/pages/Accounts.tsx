@@ -3,9 +3,10 @@ import { Header } from "@/components/layout/Header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ACCOUNTS, type Account } from "@/data/mock";
+import { type Account } from "@/data/mock";
 import { formatCurrency, daysSince, pctChange } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
+import { useAM } from "@/context/AMContext";
 import {
   AreaChart, Area, ResponsiveContainer, Tooltip
 } from "recharts";
@@ -30,14 +31,15 @@ const aiTierBadge: Record<Account["aiAdoption"], { color: string; label: string 
 
 export default function Accounts() {
   const navigate = useNavigate();
+  const { accounts } = useAM();
   const [search, setSearch] = useState("");
   const [filterHealth, setFilterHealth] = useState("all");
   const [filterVertical, setFilterVertical] = useState("all");
   const [sortBy, setSortBy] = useState<"mrr" | "days" | "health">("mrr");
 
-  const verticals = [...new Set(ACCOUNTS.map(a => a.vertical))];
+  const verticals = [...new Set(accounts.map(a => a.vertical))];
 
-  const filtered = ACCOUNTS
+  const filtered = accounts
     .filter(a => {
       const q = search.toLowerCase();
       return (
@@ -53,14 +55,14 @@ export default function Accounts() {
       return order[a.health] - order[b.health];
     });
 
-  const activeAccounts = ACCOUNTS.filter(a => a.mrr > 0);
+  const activeAccounts = accounts.filter(a => a.mrr > 0);
   const totalMRR = activeAccounts.reduce((s, a) => s + a.mrr, 0);
 
   return (
     <div className="animate-fade-in">
       <Header
         title="Book of Business"
-        subtitle={`${activeAccounts.length} active accounts · ${formatCurrency(totalMRR)} MRR · ${ACCOUNTS.length - activeAccounts.length} churned`}
+        subtitle={`${activeAccounts.length} active accounts · ${formatCurrency(totalMRR)} MRR · ${accounts.length - activeAccounts.length} churned`}
       />
 
       <div className="p-6 space-y-4">

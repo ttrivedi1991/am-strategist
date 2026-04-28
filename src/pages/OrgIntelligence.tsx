@@ -3,9 +3,10 @@ import { Header } from "@/components/layout/Header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ORG_ALERTS, type OrgAlert } from "@/data/mock";
+import { type OrgAlert } from "@/data/mock";
 import { formatDate } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
+import { useAM } from "@/context/AMContext";
 import {
   Building2, UserCheck, TrendingUp, Newspaper, Award,
   Zap, ArrowRight, ExternalLink, AlertTriangle, Bell, RefreshCw
@@ -28,10 +29,11 @@ const urgencyConfig = {
 
 export default function OrgIntelligence() {
   const navigate = useNavigate();
+  const { orgAlerts } = useAM();
   const [filter, setFilter] = useState<"all" | OrgAlert["urgency"]>("all");
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  const filtered = filter === "all" ? ORG_ALERTS : ORG_ALERTS.filter(a => a.urgency === filter);
+  const filtered = filter === "all" ? orgAlerts : orgAlerts.filter(a => a.urgency === filter);
 
   return (
     <div className="animate-fade-in">
@@ -44,7 +46,7 @@ export default function OrgIntelligence() {
         {/* Summary */}
         <div className="grid grid-cols-3 gap-3">
           {(["high", "medium", "low"] as const).map(urgency => {
-            const count = ORG_ALERTS.filter(a => a.urgency === urgency).length;
+            const count = orgAlerts.filter(a => a.urgency === urgency).length;
             const config = urgencyConfig[urgency];
             return (
               <button

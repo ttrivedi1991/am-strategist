@@ -3,7 +3,7 @@ import { Header } from "@/components/layout/Header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ACCOUNTS } from "@/data/mock";
+import { useAM } from "@/context/AMContext";
 import {
   FileText, Sparkles, ArrowRight, Zap, Target, Users,
   ChevronDown, ChevronUp, ClipboardPaste, Loader2
@@ -39,7 +39,7 @@ interface ActionItem {
   rationale: string;
 }
 
-function parseBriefToActions(brief: string): ActionItem[] {
+function parseBriefToActions(brief: string, accounts: import("@/data/mock").Account[]): ActionItem[] {
   const hasAIReceptionist = brief.toLowerCase().includes("ai receptionist");
   const hasReviewResponder = brief.toLowerCase().includes("review responder");
   const hasContentWriter = brief.toLowerCase().includes("content writer");
@@ -51,7 +51,7 @@ function parseBriefToActions(brief: string): ActionItem[] {
   const actions: ActionItem[] = [];
 
   if (hasAIReceptionist) {
-    const targets = ACCOUNTS.filter(a =>
+    const targets = accounts.filter(a =>
       (a.aiAdoption === "none" || a.aiAdoption === "basic") &&
       (hasHomeServices ? a.vertical === "Home Services" : true) ||
       (hasLegal ? a.vertical === "Legal" : false)
@@ -69,7 +69,7 @@ function parseBriefToActions(brief: string): ActionItem[] {
   }
 
   if (hasReviewResponder) {
-    const targets = ACCOUNTS.filter(a => ["Restaurants", "Automotive", "Healthcare"].includes(a.vertical) && a.aiAdoption !== "power").slice(0, 2);
+    const targets = accounts.filter(a => ["Restaurants", "Automotive", "Healthcare"].includes(a.vertical) && a.aiAdoption !== "power").slice(0, 2);
     targets.forEach(a => {
       actions.push({
         account: a.name,
@@ -82,7 +82,7 @@ function parseBriefToActions(brief: string): ActionItem[] {
   }
 
   if (hasContentWriter) {
-    const targets = ACCOUNTS.filter(a => ["Home Services", "Healthcare"].includes(a.vertical) && a.aiAdoption === "none").slice(0, 2);
+    const targets = accounts.filter(a => ["Home Services", "Healthcare"].includes(a.vertical) && a.aiAdoption === "none").slice(0, 2);
     targets.forEach(a => {
       actions.push({
         account: a.name,
@@ -95,7 +95,7 @@ function parseBriefToActions(brief: string): ActionItem[] {
   }
 
   if (hasCRM) {
-    const targets = ACCOUNTS.filter(a => a.products.includes("CRM Pro")).slice(0, 2);
+    const targets = accounts.filter(a => a.products.includes("CRM Pro")).slice(0, 2);
     targets.forEach(a => {
       actions.push({
         account: a.name,
@@ -113,6 +113,7 @@ function parseBriefToActions(brief: string): ActionItem[] {
 const urgencyColors = { high: "danger", medium: "warning", low: "info" } as const;
 
 export default function WeeklyBrief() {
+  const { accounts } = useAM();
   const [brief, setBrief] = useState(SAMPLE_BRIEF);
   const [actions, setActions] = useState<ActionItem[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -122,7 +123,7 @@ export default function WeeklyBrief() {
     setLoading(true);
     setActions(null);
     setTimeout(() => {
-      setActions(parseBriefToActions(brief));
+      setActions(parseBriefToActions(brief, accounts));
       setLoading(false);
     }, 1200);
   }
@@ -247,7 +248,7 @@ export default function WeeklyBrief() {
                         Invite your at-risk and MIA accounts. This is a warm re-engagement vehicle — no sales pressure, just value.
                       </p>
                       <div className="flex flex-wrap gap-1.5 mt-2">
-                        {ACCOUNTS.filter(a => a.isMIA || a.aiAdoption === "none").map(a => (
+                        {accounts.filter(a => a.isMIA || a.aiAdoption === "none").map(a => (
                           <span key={a.id} className="text-[10px] px-1.5 py-0.5 rounded bg-secondary text-muted-foreground">{a.name}</span>
                         ))}
                       </div>

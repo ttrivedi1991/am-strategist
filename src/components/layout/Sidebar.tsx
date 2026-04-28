@@ -1,8 +1,10 @@
+import { useState } from "react";
 import { NavLink } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { AM } from "@/data/mock";
+import { AM_ROSTER } from "@/data/mock";
+import { useAM } from "@/context/AMContext";
 import {
-  LayoutDashboard, Users, BrainCircuit, Bell, Send, UserX, FileText, Settings, Zap
+  LayoutDashboard, Users, BrainCircuit, Bell, Send, UserX, FileText, Zap, ChevronUp, Check
 } from "lucide-react";
 
 const NAV = [
@@ -15,7 +17,16 @@ const NAV = [
   { to: "/brief", icon: FileText, label: "Weekly Brief" },
 ];
 
+const AVATAR_COLORS: Record<string, string> = {
+  tanmay: "bg-blue-500",
+  desiree: "bg-violet-500",
+  adam: "bg-emerald-500",
+};
+
 export function Sidebar() {
+  const { selectedAM, setSelectedAM } = useAM();
+  const [open, setOpen] = useState(false);
+
   return (
     <aside className="fixed inset-y-0 left-0 z-40 w-56 flex flex-col bg-v-navy border-r border-white/10">
       {/* Logo */}
@@ -55,18 +66,49 @@ export function Sidebar() {
         ))}
       </nav>
 
-      {/* AM Profile */}
-      <div className="p-3 border-t border-white/10">
-        <div className="flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-white/5 cursor-pointer transition-colors">
-          <div className="w-7 h-7 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
-            {AM.avatar}
+      {/* AM Switcher */}
+      <div className="p-3 border-t border-white/10 relative">
+        {/* Dropdown (opens upward) */}
+        {open && (
+          <div className="absolute bottom-full left-3 right-3 mb-1 bg-[#1a2235] border border-white/10 rounded-xl overflow-hidden shadow-xl">
+            <p className="px-3 pt-2.5 pb-1.5 text-[10px] font-semibold text-white/30 uppercase tracking-widest">
+              Enterprise Team
+            </p>
+            {AM_ROSTER.map(am => (
+              <button
+                key={am.id}
+                onClick={() => { setSelectedAM(am); setOpen(false); }}
+                className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-white/6 transition-colors text-left"
+              >
+                <div className={cn("w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0", AVATAR_COLORS[am.id])}>
+                  {am.avatar}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-white text-xs font-medium truncate">{am.name}</p>
+                  <p className="text-white/40 text-[10px] truncate">{am.title}</p>
+                </div>
+                {selectedAM.id === am.id && (
+                  <Check className="w-3 h-3 text-blue-400 shrink-0" />
+                )}
+              </button>
+            ))}
           </div>
-          <div className="min-w-0">
-            <p className="text-white text-xs font-medium truncate">{AM.name}</p>
-            <p className="text-white/40 text-[10px] truncate">{AM.title}</p>
+        )}
+
+        {/* Current AM card */}
+        <button
+          onClick={() => setOpen(o => !o)}
+          className="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-white/5 cursor-pointer transition-colors"
+        >
+          <div className={cn("w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0", AVATAR_COLORS[selectedAM.id])}>
+            {selectedAM.avatar}
           </div>
-          <Settings className="w-3.5 h-3.5 text-white/30 ml-auto shrink-0" />
-        </div>
+          <div className="min-w-0 flex-1 text-left">
+            <p className="text-white text-xs font-medium truncate">{selectedAM.name}</p>
+            <p className="text-white/40 text-[10px] truncate">{selectedAM.title}</p>
+          </div>
+          <ChevronUp className={cn("w-3.5 h-3.5 text-white/30 shrink-0 transition-transform", open ? "" : "rotate-180")} />
+        </button>
       </div>
     </aside>
   );

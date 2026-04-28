@@ -3,9 +3,9 @@ import { StatCard } from "@/components/ui/stat-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ACCOUNTS, REVENUE_TREND, WEEKLY_ACTIONS, ORG_ALERTS, AM } from "@/data/mock";
 import { formatCurrency, pctChange } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
+import { useAM } from "@/context/AMContext";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from "recharts";
@@ -19,21 +19,21 @@ const priorityLabel = { high: "Urgent", medium: "This Week", low: "FYI" } as con
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const totalMRR = ACCOUNTS.reduce((s, a) => s + a.mrr, 0);
+  const { accounts, orgAlerts, selectedAM } = useAM();
+  const totalMRR = accounts.reduce((s, a) => s + a.mrr, 0);
   // QoQ: compare Mar 2026 (current) to Dec 2025 (Q4 close) — AMs are paid on QoQ growth
-  const totalMRRQ4 = ACCOUNTS.reduce((s, a) => s + (a.revenueHistory[2]?.mrr ?? 0), 0);
-  const activeAccounts = ACCOUNTS.filter(a => a.mrr > 0); // churned accounts excluded from active metrics
+  const totalMRRQ4 = accounts.reduce((s, a) => s + (a.revenueHistory[2]?.mrr ?? 0), 0);
+  const activeAccounts = accounts.filter(a => a.mrr > 0); // churned accounts excluded from active metrics
   const miaCount = activeAccounts.filter(a => a.isMIA).length;
   const aiPowerCount = activeAccounts.filter(a => a.aiAdoption === "power" || a.aiAdoption === "growth").length;
-  const urgentAlerts = ORG_ALERTS.filter(a => a.urgency === "high").length;
-  const quotaPct = Math.round((AM.achievedMRR / AM.quota) * 100);
+  const quotaPct = Math.round((selectedAM.achievedMRR / selectedAM.quota) * 100);
 
   const revenueChange = pctChange(totalMRR, totalMRRQ4);
 
   return (
     <div className="animate-fade-in">
       <Header
-        title="Good morning, Tanmay 👋"
+        title={`Good morning, ${selectedAM.name.split(" ")[0]} 👋`}
         subtitle="Here's your strategic overview for the week of April 27, 2026"
       />
 
@@ -65,7 +65,7 @@ export default function Dashboard() {
           <StatCard
             label="Quota Attainment"
             value={`${quotaPct}%`}
-            changeLabel={`${formatCurrency(AM.quota - AM.achievedMRR)} gap`}
+            changeLabel={`${formatCurrency(selectedAM.quota - selectedAM.achievedMRR)} gap`}
             icon={TrendingUp}
             iconColor={quotaPct >= 100 ? "text-v-green" : "text-v-amber"}
             trend={quotaPct >= 100 ? "up" : "down"}
@@ -106,7 +106,7 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={200}>
-                <AreaChart data={REVENUE_TREND} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                <AreaChart data={selectedAM.revenueTrend} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
                   <defs>
                     <linearGradient id="mrrGrad" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#EF4444" stopOpacity={0.15} />
@@ -155,15 +155,15 @@ export default function Dashboard() {
               <div className="space-y-2">
                 <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground">Achieved MRR</span>
-                  <span className="font-medium">{formatCurrency(AM.achievedMRR)}</span>
+                  <span className="font-medium">{formatCurrency(selectedAM.achievedMRR)}</span>
                 </div>
                 <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground">Monthly Quota</span>
-                  <span className="font-medium">{formatCurrency(AM.quota)}</span>
+                  <span className="font-medium">{formatCurrency(selectedAM.quota)}</span>
                 </div>
                 <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground">Gap to Close</span>
-                  <span className="font-medium text-v-amber">{formatCurrency(AM.quota - AM.achievedMRR)}</span>
+                  <span className="font-medium text-v-amber">{formatCurrency(selectedAM.quota - selectedAM.achievedMRR)}</span>
                 </div>
               </div>
               <Button variant="outline" size="sm" className="w-full" onClick={() => navigate("/outreach")}>
@@ -182,11 +182,11 @@ export default function Dashboard() {
                   <Flame className="w-3.5 h-3.5 text-v-amber" />
                   This Week's Priority Actions
                 </CardTitle>
-                <Badge variant="warning">{WEEKLY_ACTIONS.filter(a => a.priority === "high").length} urgent</Badge>
+                <Badge variant="warning">{selectedAM.weeklyActions.filter(a => a.priority === "high").length} urgent</Badge>
               </div>
             </CardHeader>
             <CardContent className="space-y-2">
-              {WEEKLY_ACTIONS.map(action => (
+              {selectedAM.weeklyActions.map(action => (
                 <div key={action.id} className="flex items-start gap-3 p-3 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors group">
                   <div className="mt-0.5">
                     {action.priority === "high"
@@ -225,7 +225,7 @@ export default function Dashboard() {
               </div>
             </CardHeader>
             <CardContent className="space-y-2">
-              {ORG_ALERTS.slice(0, 4).map(alert => (
+              {orgAlerts.slice(0, 4).map(alert => (
                 <div key={alert.id} className="flex items-start gap-3 p-3 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors cursor-pointer" onClick={() => navigate("/intel")}>
                   <div className={`mt-0.5 w-2 h-2 rounded-full shrink-0 ${alert.urgency === "high" ? "bg-v-red" : alert.urgency === "medium" ? "bg-v-amber" : "bg-v-teal"}`} />
                   <div className="flex-1 min-w-0">
@@ -236,7 +236,7 @@ export default function Dashboard() {
                 </div>
               ))}
               <Button variant="outline" size="sm" className="w-full mt-1" onClick={() => navigate("/intel")}>
-                View all {ORG_ALERTS.length} alerts <ArrowRight className="w-3.5 h-3.5" />
+                View all {orgAlerts.length} alerts <ArrowRight className="w-3.5 h-3.5" />
               </Button>
             </CardContent>
           </Card>
