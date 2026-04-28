@@ -1,0 +1,56 @@
+# AM Strategist — Claude Code Project
+
+## What this is
+A strategic dashboard for Vendasta Account Managers. Built by Tanmay Trivedi (ttrivedi@vendasta.com).
+Stack: React 18 + TypeScript + Vite + Tailwind CSS v3 + shadcn/ui + Recharts + React Router v6.
+
+## Running the app
+```bash
+npm install   # first time only
+npm run dev   # starts at http://localhost:5173
+```
+
+## Key files
+- `src/data/mock.ts` — all partner/account data (BigQuery-sourced, Oct 2025–Mar 2026 actuals)
+- `src/pages/Dashboard.tsx` — main dashboard
+- `src/pages/Accounts.tsx` — book of business list
+- `src/pages/OutreachPlanner.tsx` — multi-touch outreach sequences
+- `src/pages/MIARecovery.tsx` — 45-day MIA recovery workflows
+- `src/pages/OrgIntelligence.tsx` — partner org alerts
+- `src/pages/WeeklyBrief.tsx` — Confluence brief parser
+- `src/pages/AIAdoption.tsx` — AI product adoption tracking
+- `src/lib/utils.ts` — formatCurrency, pctChange, daysSince, formatDate
+- `src/components/ui/` — Badge, Button, Card, StatCard
+
+## Data layer
+All MRR data comes from BigQuery: `data-warehouse-460017.management.f_billing_tx`
+Query runner: `/Users/ttrivedi/Documents/Git/vendasta/business-intelligence/`
+Auth: `gcloud` SDK at `~/Downloads/google-cloud-sdk/bin/` — authenticated as ttrivedi@vendasta.com
+
+Key BigQuery tables:
+- `f_billing_tx` — transaction-level billing facts
+- `dim_current_partner` — current partner attributes
+- `dim_current_user` — current user/AM assignments
+- `dim_date` — date dimension (join on `*_date_sk`)
+
+## Business context
+- AM: Tanmay Trivedi, Senior Account Manager — ISV vertical at Vendasta
+- Book: ~32 active Channel partners, $314K MRR (Mar 2026 actual)
+- Commission basis: QoQ growth (Q1 2026 vs Q4 2025)
+- MIA rule: no meeting in 45+ days = MIA
+- All MRR comparisons use QoQ (Dec 2025 → Mar 2026), not MoM
+
+## Writing style
+Outreach emails follow `anti-ai-writing-style.md` (in Cowork/Google Drive):
+- Active voice, no exclamation points, no forbidden phrases
+- Lead with the point — no throat-clearing
+- Reference existing relationship (not cold outreach)
+- Reference Brendan King's March 20 "Strategic Discussion: 2026 AI Roadmap" email as context
+- Sign as "Tanmay"
+
+## Known domain mappings (partner email ≠ company name)
+- ApartmentRatings → internetbrands.com
+- LocalBizNOW → ansira.com
+- Web.com → newfold.com (parent)
+- Platr.ai → takeout7.com (operating entity)
+- Digital Air Strike → digitalairstrike.com
