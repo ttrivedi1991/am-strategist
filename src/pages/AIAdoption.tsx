@@ -17,6 +17,7 @@ export default function AIAdoption() {
   const navigate = useNavigate();
   const { accounts, selectedAM } = useAM();
   const [expandedAccount, setExpandedAccount] = useState<string | null>(null);
+  const [activeFilter, setActiveFilter] = useState<"all" | "ai" | "noai" | "multi">("all");
 
   const trendData = AI_ADOPTION_DATA[selectedAM.id] ?? [];
 
@@ -47,28 +48,26 @@ export default function AIAdoption() {
       />
 
       <div className="p-6 space-y-6">
-        {/* Summary Stats */}
+        {/* Summary Stats — clickable to filter lists below */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="rounded-xl border border-border bg-card p-4">
-            <p className="text-xs font-medium text-muted-foreground mb-1">Partners with AI</p>
-            <p className="text-2xl font-bold text-v-blue">{withAI.length}</p>
-            <p className="text-xs text-muted-foreground">{adoptionRate}% of book</p>
-          </div>
-          <div className="rounded-xl border border-border bg-card p-4">
-            <p className="text-xs font-medium text-muted-foreground mb-1">No Active AI</p>
-            <p className="text-2xl font-bold text-foreground">{noAI.length}</p>
-            <p className="text-xs text-muted-foreground">expansion opportunity</p>
-          </div>
-          <div className="rounded-xl border border-border bg-card p-4">
-            <p className="text-xs font-medium text-muted-foreground mb-1">Unique AI Products</p>
-            <p className="text-2xl font-bold text-v-purple">{Object.keys(productFreq).length}</p>
-            <p className="text-xs text-muted-foreground">in active use</p>
-          </div>
-          <div className="rounded-xl border border-border bg-card p-4">
-            <p className="text-xs font-medium text-muted-foreground mb-1">Multi-product</p>
-            <p className="text-2xl font-bold text-v-teal">{withAI.filter(a => a.products.length > 1).length}</p>
-            <p className="text-xs text-muted-foreground">partners with 2+ AI products</p>
-          </div>
+          {[
+            { key: "ai" as const, label: "Partners with AI", value: withAI.length, sub: `${adoptionRate}% of book`, color: "text-v-blue", ring: "ring-v-blue/30" },
+            { key: "noai" as const, label: "No Active AI", value: noAI.filter(a => a.mrr > 0).length, sub: "expansion targets", color: "text-foreground", ring: "ring-border" },
+            { key: "all" as const, label: "Unique AI Products", value: Object.keys(productFreq).length, sub: "in active use", color: "text-v-purple", ring: "ring-v-purple/30" },
+            { key: "multi" as const, label: "Multi-product", value: withAI.filter(a => a.products.length > 1).length, sub: "partners with 2+ AI", color: "text-v-teal", ring: "ring-v-teal/30" },
+          ].map(card => (
+            <button
+              key={card.key}
+              onClick={() => setActiveFilter(activeFilter === card.key ? "all" : card.key)}
+              className={`rounded-xl border bg-card p-4 text-left transition-all hover:shadow-sm ${
+                activeFilter === card.key ? `ring-2 ${card.ring} border-transparent` : "border-border"
+              }`}
+            >
+              <p className="text-xs font-medium text-muted-foreground mb-1">{card.label}</p>
+              <p className={`text-2xl font-bold ${card.color}`}>{card.value}</p>
+              <p className="text-xs text-muted-foreground">{card.sub}</p>
+            </button>
+          ))}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
@@ -152,6 +151,7 @@ export default function AIAdoption() {
         </div>
 
         {/* Partners with active AI */}
+        {(activeFilter === "all" || activeFilter === "ai" || activeFilter === "multi") && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-1.5">
@@ -164,6 +164,7 @@ export default function AIAdoption() {
           </CardHeader>
           <CardContent className="space-y-2">
             {withAI
+              .filter(a => activeFilter === "multi" ? a.products.length > 1 : true)
               .sort((a, b) => b.products.length - a.products.length)
               .map(account => (
                 <div
@@ -218,8 +219,10 @@ export default function AIAdoption() {
               ))}
           </CardContent>
         </Card>
+        )}
 
         {/* No AI — expansion targets */}
+        {(activeFilter === "all" || activeFilter === "noai") && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-1.5">
@@ -253,6 +256,7 @@ export default function AIAdoption() {
               ))}
           </CardContent>
         </Card>
+        )}
       </div>
     </div>
   );

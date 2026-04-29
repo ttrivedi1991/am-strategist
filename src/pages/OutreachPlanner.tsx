@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Header } from "@/components/layout/Header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,9 +7,10 @@ import { Button } from "@/components/ui/button";
 import { type Account, type OrgAlert } from "@/data/mock";
 import { formatDate, daysSince } from "@/lib/utils";
 import { useAM } from "@/context/AMContext";
+import { formatCurrency } from "@/lib/utils";
 import {
   Send, Mail, Calendar, Sparkles, Copy, CheckCircle2,
-  ChevronDown, ChevronRight, Clock, Target, Zap
+  ChevronDown, ChevronRight, Clock, Target, Zap, DollarSign
 } from "lucide-react";
 
 interface OutreachStep {
@@ -142,9 +143,16 @@ export default function OutreachPlanner() {
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
   const [expanded, setExpanded] = useState<number>(0);
 
+  const planRef = useRef<HTMLDivElement>(null);
   const account = accounts.find(a => a.id === selectedId) || accounts[0];
   const plan = generateOutreachPlan(account?.id || "", accounts, orgAlerts);
   const alert = orgAlerts.find(a => a.accountId === account?.id);
+
+  // Scroll plan panel to top and reset expanded step whenever account changes
+  useEffect(() => {
+    setExpanded(0);
+    planRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  }, [selectedId]);
 
   function copyBody(text: string, idx: number) {
     navigator.clipboard.writeText(text || "").then(() => {
@@ -160,30 +168,50 @@ export default function OutreachPlanner() {
       <div className="p-6">
         <div className="flex flex-col lg:flex-row gap-5">
           {/* Account Selector */}
-          <div className="lg:w-64 shrink-0 space-y-1.5">
+          <div className="lg:w-72 shrink-0 space-y-1">
             <p className="text-xs font-semibold text-muted-foreground px-1 mb-2">SELECT ACCOUNT</p>
-            {accounts.map(a => (
-              <button
-                key={a.id}
-                onClick={() => { setSelectedId(a.id); setExpanded(0); }}
-                className={`w-full text-left px-3 py-2.5 rounded-lg border transition-all ${selectedId === a.id ? "border-primary bg-primary/5" : "border-transparent hover:border-border hover:bg-secondary/50"}`}
-              >
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded bg-secondary flex items-center justify-center text-[10px] font-bold text-foreground shrink-0">
-                    {a.name.slice(0, 2)}
+            {accounts
+              .filter(a => a.mrr > 0)
+              .sort((a, b) => {
+                // Priority sort: MIA first, then at-risk, then by MRR
+                if (a.isMIA && !b.isMIA) return -1;
+                if (!a.isMIA && b.isMIA) return 1;
+                if (a.health === "at-risk" && b.health !== "at-risk") return -1;
+                if (a.health !== "at-risk" && b.health === "at-risk") return 1;
+                return b.mrr - a.mrr;
+              })
+              .map(a => (
+                <button
+                  key={a.id}
+                  onClick={() => setSelectedId(a.id)}
+                  className={`w-full text-left px-3 py-2.5 rounded-lg border transition-all ${
+                    selectedId === a.id
+                      ? "border-primary bg-primary/5 shadow-sm"
+                      : "border-transparent hover:border-border hover:bg-secondary/50"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <div className={`w-6 h-6 rounded flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                      a.health === "champion" ? "bg-v-teal/10 text-v-teal"
+                      : a.health === "at-risk" || a.isMIA ? "bg-v-red/10 text-v-red"
+                      : "bg-secondary text-foreground"
+                    }`}>
+                      {a.name.slice(0, 2)}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-medium text-foreground truncate">{a.name}</p>
+                      <p className="text-[10px] text-muted-foreground truncate">{a.contactName} · {formatCurrency(a.mrr)}</p>
+                    </div>
+                    {a.isMIA && <Badge variant="danger" className="text-[9px] shrink-0">MIA</Badge>}
+                    {!a.isMIA && a.health === "at-risk" && <Badge variant="warning" className="text-[9px] shrink-0">Risk</Badge>}
                   </div>
-                  <div className="min-w-0">
-                    <p className="text-xs font-medium text-foreground truncate">{a.name}</p>
-                    <p className="text-[10px] text-muted-foreground">{a.contactName}</p>
-                  </div>
-                  {a.isMIA && <Badge variant="danger" className="text-[9px] ml-auto shrink-0">MIA</Badge>}
-                </div>
-              </button>
-            ))}
+                </button>
+              ))
+            }
           </div>
 
           {/* Plan */}
-          <div className="flex-1 space-y-4">
+          <div ref={planRef} className="flex-1 space-y-4 overflow-y-auto">
             {/* Account Header */}
             <Card>
               <CardContent className="p-4">

@@ -209,19 +209,9 @@ export default function Accounts() {
                     </div>
 
                     {/* Actions */}
-                    <div className="flex items-center gap-1">
-                      {hasBreakdown && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => setExpanded(isExpanded ? null : account.id)}
-                          title="Product breakdown"
-                        >
-                          {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <Package className="w-3.5 h-3.5 text-muted-foreground" />}
-                        </Button>
-                      )}
-                      <Button variant="ghost" size="icon" onClick={() => navigate(`/outreach?account=${account.id}`)}>
-                        <ArrowRight className="w-3.5 h-3.5" />
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button variant="outline" size="sm" className="text-xs gap-1.5" onClick={() => navigate(`/outreach?account=${account.id}`)}>
+                        Outreach <ArrowRight className="w-3 h-3" />
                       </Button>
                     </div>
                   </div>
@@ -233,6 +223,26 @@ export default function Accounts() {
                         <span key={p} className="text-[10px] px-1.5 py-0.5 rounded bg-v-blue/10 text-v-blue font-medium">{p}</span>
                       ))}
                     </div>
+                  )}
+
+                  {/* Expand trigger — always visible when there's billing data */}
+                  {hasBreakdown && (
+                    <button
+                      onClick={() => setExpanded(isExpanded ? null : account.id)}
+                      className="w-full mt-3 flex items-center justify-between px-3 py-1.5 rounded-lg bg-secondary/40 hover:bg-secondary/70 transition-colors group"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <Package className="w-3 h-3 text-muted-foreground" />
+                        <span className="text-[10px] font-medium text-muted-foreground">
+                          {account.productBreakdown!.filter(p => p.mrr > 0).length} products ·{" "}
+                          {formatCurrency(account.productBreakdown!.reduce((s, p) => s + (p.mrr > 0 ? p.mrr : 0), 0))} billing
+                        </span>
+                      </div>
+                      {isExpanded
+                        ? <ChevronUp className="w-3 h-3 text-muted-foreground" />
+                        : <ChevronDown className="w-3 h-3 text-muted-foreground group-hover:text-foreground" />
+                      }
+                    </button>
                   )}
 
                   {/* Expanded product billing breakdown */}
