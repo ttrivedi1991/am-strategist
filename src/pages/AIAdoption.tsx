@@ -23,7 +23,7 @@ export default function AIAdoption() {
 
   const withAI = accounts.filter(a => a.aiAdoption !== "none");
   const noAI = accounts.filter(a => a.aiAdoption === "none");
-  const adoptionRate = Math.round((withAI.length / accounts.length) * 100);
+  const adoptionRate = accounts.length > 0 ? Math.round((withAI.length / accounts.length) * 100) : 0;
 
   // Total AI products in use
   const allProducts = withAI.flatMap(a => a.products);
@@ -131,6 +131,7 @@ export default function AIAdoption() {
               </CardContent>
             </Card>
 
+            {topProducts.length > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle className="text-sm">Top AI Products in Use</CardTitle>
@@ -147,6 +148,7 @@ export default function AIAdoption() {
                 ))}
               </CardContent>
             </Card>
+            )}
           </div>
         </div>
 
