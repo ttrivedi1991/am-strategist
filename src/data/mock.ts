@@ -42,6 +42,7 @@ export interface Account {
   isMIA: boolean;
   onboardedDate: string;
   revenueHistory: { week: string; mrr: number }[];
+  agid?: string; // Vendasta vmf_account_group_id from dim_current_partner
 }
 
 export interface AMProfile {
@@ -229,6 +230,7 @@ export const ACCOUNTS: Account[] = [
   },
   {
     id: "acc-uwm",
+    agid: "AG-4JFDHHX7W4",
     name: "United Wholesale Mortgage, LLC",
     internalId: "USFS",
     contactName: "Sarah DeCiantis",
@@ -425,6 +427,7 @@ export const ACCOUNTS: Account[] = [
   },
   {
     id: "acc-bbbatlanta",
+    agid: "AG-BS3RNGK7WC",
     name: "BBB Atlanta & NE Georgia",
     internalId: "NGBB",
     contactName: "Josh Hares",
@@ -481,6 +484,7 @@ export const ACCOUNTS: Account[] = [
   },
   {
     id: "acc-formpiper",
+    agid: "AG-BSQ264C7PF",
     name: "FormPiper PRESENCE",
     internalId: "SNM",
     contactName: "Brad / Michelle",
@@ -537,6 +541,7 @@ export const ACCOUNTS: Account[] = [
   },
   {
     id: "acc-tripadv",
+    agid: "AG-V3CTBD72",
     name: "TripAdvisor",
     internalId: "SIPL",
     contactName: "Adam Ochman",
@@ -649,6 +654,7 @@ export const ACCOUNTS: Account[] = [
   },
   {
     id: "acc-cantrex",
+    agid: "AG-GCRSZFJPNC",
     name: "Cantrex Nationwide",
     internalId: "P0QK",
     contactName: "Pierre Leblanc",
@@ -817,6 +823,7 @@ export const ACCOUNTS: Account[] = [
   },
   {
     id: "acc-fiska",
+    agid: "AG-BNW3QSPBVV",
     name: "Fiska Inc.",
     internalId: "F08M",
     contactName: "Aisha Benali",
@@ -3433,10 +3440,6 @@ export const PENDING_DEACTIVATIONS: Record<string, PendingDeactivation[]> = {
   "acc-fiska": [
     { productName: "Reputation AI Pro", mrr: 545, cancelledOn: "2026-04-10", activeUntil: "2026-05-02" },
     { productName: "Professional Subscription", mrr: 538, cancelledOn: "2026-04-10", activeUntil: "2026-05-02" },
-  ],
-  // Local Ad Agency: Only remaining product pending cancel
-  "acc-localad": [
-    { productName: "Reputation AI Pro", mrr: 533, cancelledOn: "2026-04-15", activeUntil: "2026-05-05" },
   ],
   // Cantrex Nationwide: Conversations AI Standard dropped — budget cut signal
   "acc-cantrex": [
