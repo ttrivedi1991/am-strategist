@@ -8,9 +8,9 @@ import { useNavigate } from "react-router-dom";
 import { useAM } from "@/context/AMContext";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, Cell, PieChart, Pie, Legend
+  ResponsiveContainer, Cell, PieChart, Pie
 } from "recharts";
-import { BrainCircuit, ArrowRight, Sparkles, TrendingUp, Zap } from "lucide-react";
+import { BrainCircuit, ArrowRight, Sparkles, TrendingUp, Zap, CheckCircle2 } from "lucide-react";
 
 const TIER_COLORS = { none: "#e5e7eb", basic: "#00C2CB", growth: "#0055FF", power: "#7C3AED" };
 const TIER_LABELS = { none: "No AI", basic: "Basic AI", growth: "Growth AI", power: "Power AI" };
@@ -148,8 +148,9 @@ const FALLBACK_OUTREACH = {
 
 export default function AIAdoption() {
   const navigate = useNavigate();
-  const { accounts } = useAM();
+  const { accounts, selectedAM } = useAM();
   const [selectedVertical, setSelectedVertical] = useState<string | null>(null);
+  const trendData = AI_ADOPTION_DATA[selectedAM.id] ?? [];
 
   const tierCounts = accounts.reduce((acc, a) => {
     acc[a.aiAdoption] = (acc[a.aiAdoption] || 0) + 1;
@@ -164,11 +165,11 @@ export default function AIAdoption() {
 
   const noAiAccounts = accounts.filter(a => a.aiAdoption === "none");
   const basicAccounts = accounts.filter(a => a.aiAdoption === "basic");
-  const verticals = [...new Set(accounts.filter(a => a.aiAdoption === "none" || a.aiAdoption === "basic").map(a => a.vertical))];
+  const verticals = [...new Set(accounts.filter(a => a.aiAdoption === "none").map(a => a.vertical))].sort();
 
   const targets = selectedVertical
-    ? accounts.filter(a => a.vertical === selectedVertical && (a.aiAdoption === "none" || a.aiAdoption === "basic"))
-    : [...noAiAccounts, ...basicAccounts];
+    ? accounts.filter(a => a.vertical === selectedVertical && a.aiAdoption === "none")
+    : noAiAccounts;
 
   return (
     <div className="animate-fade-in">
@@ -196,28 +197,29 @@ export default function AIAdoption() {
           {/* Adoption Trend Chart */}
           <Card className="lg:col-span-2">
             <CardHeader>
-              <CardTitle>Adoption Trend — Oct 2025 to Apr 2026</CardTitle>
+              <CardTitle>Partners with Active AI Products — Jan to Apr 2026</CardTitle>
+              <p className="text-xs text-muted-foreground">Source: BigQuery · billing_reporting &gt; 0 on ai_product_ind = true products</p>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={AI_ADOPTION_DATA} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                <BarChart data={trendData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                   <XAxis dataKey="month" tick={{ fontSize: 10, fill: "#9ca3af" }} tickLine={false} axisLine={false} />
                   <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} tickLine={false} axisLine={false} />
                   <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 12 }} />
-                  <Bar dataKey="none" stackId="a" fill={TIER_COLORS.none} name="No AI" radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="basic" stackId="a" fill={TIER_COLORS.basic} name="Basic" />
-                  <Bar dataKey="growth" stackId="a" fill={TIER_COLORS.growth} name="Growth" />
-                  <Bar dataKey="power" stackId="a" fill={TIER_COLORS.power} name="Power" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="noAI" stackId="a" fill={TIER_COLORS.none} name="No AI" radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="withAI" stackId="a" fill="#0055FF" name="Has AI" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
-              <div className="flex items-center gap-4 mt-3 flex-wrap">
-                {Object.entries(TIER_COLORS).map(([tier, color]) => (
-                  <div key={tier} className="flex items-center gap-1.5">
-                    <div className="w-2.5 h-2.5 rounded-sm" style={{ background: color }} />
-                    <span className="text-xs text-muted-foreground">{TIER_LABELS[tier as keyof typeof TIER_LABELS]}</span>
-                  </div>
-                ))}
+              <div className="flex items-center gap-4 mt-3">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-2.5 h-2.5 rounded-sm" style={{ background: "#0055FF" }} />
+                  <span className="text-xs text-muted-foreground">Has active AI products</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-2.5 h-2.5 rounded-sm" style={{ background: TIER_COLORS.none }} />
+                  <span className="text-xs text-muted-foreground">No active AI products</span>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -263,7 +265,7 @@ export default function AIAdoption() {
                   AI Outreach Generator
                 </CardTitle>
                 <p className="text-xs text-muted-foreground mt-1">
-                  {noAiAccounts.length + basicAccounts.length} accounts are candidates for AI upsell · Filter by vertical to generate targeted outreach
+                  {noAiAccounts.length} accounts have zero active AI products · Source: BigQuery Mar 2026 actuals
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -320,19 +322,50 @@ export default function AIAdoption() {
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap gap-1.5">
-                    {AI_PRODUCTS
-                      .filter(p => p.fit.includes(account.vertical))
-                      .map(p => (
-                        <div key={p.name} className="flex items-center gap-1 px-2 py-1 rounded-full bg-v-purple/10 text-v-purple text-[10px] font-medium">
-                          <TrendingUp className="w-2.5 h-2.5" />
-                          {p.name}
-                        </div>
-                      ))}
-                  </div>
                 </div>
               );
             })}
+            {targets.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-6">All accounts in this vertical already have active AI products.</p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Partners already using AI */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-1.5">
+              <CheckCircle2 className="w-3.5 h-3.5 text-v-green" />
+              Partners with Active AI Products
+            </CardTitle>
+            <p className="text-xs text-muted-foreground mt-1">
+              {accounts.filter(a => a.aiAdoption !== "none").length} of {accounts.length} partners · Source: BigQuery Mar 2026 actuals
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {accounts
+              .filter(a => a.aiAdoption !== "none")
+              .sort((a, b) => b.products.length - a.products.length)
+              .map(account => (
+                <div key={account.id} className="flex items-start justify-between gap-3 p-3 rounded-lg border border-border bg-secondary/20">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-medium text-foreground">{account.name}</span>
+                      <Badge variant={account.aiAdoption === "power" ? "default" : account.aiAdoption === "growth" ? "info" : "outline"}>
+                        {TIER_LABELS[account.aiAdoption]}
+                      </Badge>
+                    </div>
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {account.products.map(p => (
+                        <span key={p} className="text-[10px] px-1.5 py-0.5 rounded bg-v-blue/10 text-v-blue font-medium">{p}</span>
+                      ))}
+                    </div>
+                  </div>
+                  <Button size="sm" variant="ghost" onClick={() => navigate(`/accounts`)}>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              ))}
           </CardContent>
         </Card>
       </div>
