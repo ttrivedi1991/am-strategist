@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import { AM_ROSTER } from "@/data/mock";
 import { useAM } from "@/context/AMContext";
 import {
-  LayoutDashboard, Users, BrainCircuit, Bell, Send, UserX, FileText, Zap, ChevronUp, Check, PackageX
+  LayoutDashboard, Users, BrainCircuit, Bell, Send, UserX, FileText, Zap, ChevronUp, Check
 } from "lucide-react";
 
 const NAV = [
@@ -14,7 +14,6 @@ const NAV = [
   { to: "/intel", icon: Bell, label: "Org Intelligence" },
   { to: "/outreach", icon: Send, label: "Outreach Planner" },
   { to: "/mia", icon: UserX, label: "MIA Recovery" },
-  { to: "/deactivations", icon: PackageX, label: "Pending Deactivations" },
   { to: "/brief", icon: FileText, label: "Weekly Brief" },
 ];
 
