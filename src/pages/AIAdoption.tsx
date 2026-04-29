@@ -63,6 +63,87 @@ const OUTREACH_BY_VERTICAL: Record<string, { subject: string; hook: string; cta:
     hook: "AI-drafted content keeps your firm visible between meetings — compliant, consistent, and personal.",
     cta: "Schedule a compliance-friendly demo",
   },
+  "Digital Marketing": {
+    subject: "The agencies growing fastest right now have one thing in common",
+    hook: "AI-powered fulfillment lets your team deliver more campaigns at higher margin — without adding headcount.",
+    cta: "15-minute call to walk through the ROI model",
+  },
+  "Agency": {
+    subject: "How top agencies are using AI to scale without scaling costs",
+    hook: "AI content and automation tools let agencies take on more clients with the same team. The margin impact is significant.",
+    cta: "Want to see how it maps to your current offering?",
+  },
+  "AI / SaaS": {
+    subject: "You're already AI-forward — here's what your SMB clients are missing",
+    hook: "Your end customers need AI tools they can actually use. Vendasta's white-label AI suite gives them that under your brand.",
+    cta: "Quick walkthrough of what partners are packaging",
+  },
+  "Automotive Tech": {
+    subject: "Dealers using AI are converting 30% more service leads — here's how",
+    hook: "AI Receptionist and review automation are the two highest-ROI tools for automotive right now. Both work out of the box.",
+    cta: "Book a demo focused on your dealer network",
+  },
+  "Telecom": {
+    subject: "Your SMB customers are asking for AI — do you have an answer?",
+    hook: "Telecom partners adding AI to their SMB bundles are seeing stronger retention and higher ARPU. The demand is already there.",
+    cta: "Let's talk about bundling strategy",
+  },
+  "Domain & Hosting": {
+    subject: "Add AI to your SMB stack — without building anything",
+    hook: "Your hosting customers need reputation management and AI content tools. Vendasta's platform adds both to your existing stack.",
+    cta: "See what other hosting partners are offering",
+  },
+  "FinTech": {
+    subject: "AI tools that help your SMB clients grow — and stick with you longer",
+    hook: "FinTech platforms adding AI-powered marketing to their SMB offering see meaningfully better retention. It's a natural complement.",
+    cta: "15 minutes to show you what's working",
+  },
+  "Hospitality Tech": {
+    subject: "AI Review Responder is generating serious ROI for hospitality brands",
+    hook: "Hotels and restaurants live and die by reviews. Bulk AI response at scale keeps ratings high without manual effort.",
+    cta: "See a demo with real hospitality data",
+  },
+  "Industry Association": {
+    subject: "Give your members an AI advantage — white-labeled under your brand",
+    hook: "Associations offering AI tools to members are seeing higher engagement and new revenue. It's a differentiator members notice.",
+    cta: "Let's talk about a member-ready rollout",
+  },
+  "PropTech": {
+    subject: "Property managers using AI are filling vacancies faster",
+    hook: "AI Chat handles after-hours inquiries and schedules showings automatically — so no lead goes cold overnight.",
+    cta: "Quick demo using a property management scenario",
+  },
+  "Multifamily Tech": {
+    subject: "AI that handles leasing inquiries 24/7 — fully automated",
+    hook: "Prospective renters don't wait. AI Receptionist responds instantly, qualifies leads, and books tours while your team sleeps.",
+    cta: "See it running on a multifamily property",
+  },
+  "Franchise Tech": {
+    subject: "How franchise brands are using AI to maintain consistency across locations",
+    hook: "AI Review Responder and Content Writer ensure every location sounds on-brand — without corporate oversight on every post.",
+    cta: "15-minute call to see the franchise use case",
+  },
+  "Healthcare Tech": {
+    subject: "Your healthcare clients need AI tools — and they need them to be compliant",
+    hook: "Vendasta's AI suite is built for HIPAA-adjacent workflows. Your clients get automation without the compliance headache.",
+    cta: "Let's walk through the healthcare module",
+  },
+  "Home Services Tech": {
+    subject: "The home services platforms winning right now are all offering AI",
+    hook: "AI Receptionist and lead capture tools are the most-requested add-ons from home services SMBs. Easy to bundle, high margin.",
+    cta: "See how other platforms are packaging it",
+  },
+  "Data & Analytics": {
+    subject: "Your SMB clients need AI-powered marketing — you can be the source",
+    hook: "Data-driven teams who add AI marketing tools to their offering open a new revenue stream with minimal lift.",
+    cta: "Quick call to map it to your current product",
+  },
+};
+
+const FALLBACK_OUTREACH = {
+  subject: "A quick question about your AI roadmap for SMB clients",
+  hook: "Partners who've added AI to their SMB offering are seeing stronger retention and new revenue. Worth a conversation.",
+  cta: "15-minute call to walk through what's working",
 };
 
 export default function AIAdoption() {
@@ -199,7 +280,7 @@ export default function AIAdoption() {
           </CardHeader>
           <CardContent className="space-y-3">
             {targets.map(account => {
-              const outreach = OUTREACH_BY_VERTICAL[account.vertical];
+              const outreach = OUTREACH_BY_VERTICAL[account.vertical] ?? FALLBACK_OUTREACH;
               return (
                 <div key={account.id} className="p-4 rounded-xl border border-border bg-secondary/30 space-y-3">
                   <div className="flex items-center justify-between flex-wrap gap-2">
