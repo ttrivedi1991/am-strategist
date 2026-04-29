@@ -12,21 +12,15 @@ import {
 } from "recharts";
 import {
   Search, TrendingUp, TrendingDown, Minus, ArrowRight,
-  BrainCircuit, Clock, MapPin, ChevronDown
+  BrainCircuit, Clock, MapPin, ChevronDown, ChevronUp,
+  Star, Package
 } from "lucide-react";
 
 const healthBadge: Record<Account["health"], { variant: "success" | "warning" | "danger" | "info"; label: string }> = {
   champion: { variant: "success", label: "Champion" },
-  healthy: { variant: "info", label: "Healthy" },
-  "at-risk": { variant: "warning", label: "At Risk" },
-  churning: { variant: "danger", label: "Churning" },
-};
-
-const aiTierBadge: Record<Account["aiAdoption"], { color: string; label: string }> = {
-  none: { color: "text-muted-foreground", label: "No AI" },
-  basic: { color: "text-v-teal", label: "Basic" },
-  growth: { color: "text-v-blue", label: "Growth" },
-  power: { color: "text-v-purple", label: "Power" },
+  healthy:  { variant: "info",    label: "Healthy"   },
+  "at-risk":{ variant: "warning", label: "At Risk"   },
+  churning: { variant: "danger",  label: "Churning"  },
 };
 
 export default function Accounts() {
@@ -36,8 +30,9 @@ export default function Accounts() {
   const [filterHealth, setFilterHealth] = useState("all");
   const [filterVertical, setFilterVertical] = useState("all");
   const [sortBy, setSortBy] = useState<"mrr" | "days" | "health">("mrr");
+  const [expanded, setExpanded] = useState<string | null>(null);
 
-  const verticals = [...new Set(accounts.map(a => a.vertical))];
+  const verticals = [...new Set(accounts.map(a => a.vertical))].sort();
 
   const filtered = accounts
     .filter(a => {
@@ -62,7 +57,7 @@ export default function Accounts() {
     <div className="animate-fade-in">
       <Header
         title="Book of Business"
-        subtitle={`${activeAccounts.length} active accounts · ${formatCurrency(totalMRR)} MRR · ${accounts.length - activeAccounts.length} churned`}
+        subtitle={`${activeAccounts.length} active accounts · ${formatCurrency(totalMRR)} billing MRR · ${accounts.length - activeAccounts.length} churned`}
       />
 
       <div className="p-6 space-y-4">
@@ -81,7 +76,7 @@ export default function Accounts() {
           <select
             value={filterHealth}
             onChange={e => setFilterHealth(e.target.value)}
-            className="px-3 py-2 text-sm rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+            className="px-3 py-2 text-sm rounded-lg border border-border bg-background focus:outline-none"
           >
             <option value="all">All Health</option>
             <option value="champion">Champion</option>
@@ -92,7 +87,7 @@ export default function Accounts() {
           <select
             value={filterVertical}
             onChange={e => setFilterVertical(e.target.value)}
-            className="px-3 py-2 text-sm rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+            className="px-3 py-2 text-sm rounded-lg border border-border bg-background focus:outline-none"
           >
             <option value="all">All Verticals</option>
             {verticals.map(v => <option key={v} value={v}>{v}</option>)}
@@ -105,7 +100,7 @@ export default function Accounts() {
                 onClick={() => setSortBy(s)}
                 className={`px-2 py-1 rounded ${sortBy === s ? "bg-primary text-primary-foreground" : "hover:bg-secondary"}`}
               >
-                {s === "mrr" ? "MRR" : s === "days" ? "Days since meeting" : "Health"}
+                {s === "mrr" ? "Billing" : s === "days" ? "Days since meeting" : "Health"}
               </button>
             ))}
           </div>
@@ -114,20 +109,23 @@ export default function Accounts() {
         {/* Account Cards */}
         <div className="space-y-2">
           {filtered.map(account => {
-            // QoQ: compare current MRR (Mar 2026) to Q4 close (Dec 2025, revenueHistory[2])
             const decMRR = account.revenueHistory[2]?.mrr ?? 0;
             const mrrChg = decMRR > 0 ? pctChange(account.mrr, decMRR) : 0;
             const days = daysSince(account.lastMeeting);
             const health = healthBadge[account.health];
-            const ai = aiTierBadge[account.aiAdoption];
+            const isExpanded = expanded === account.id;
+            const hasBreakdown = account.productBreakdown && account.productBreakdown.length > 0;
 
             return (
-              <Card key={account.id} className="hover:shadow-md transition-all hover:border-primary/20">
+              <Card key={account.id} className={`transition-all hover:border-primary/20 ${account.health === "champion" ? "border-v-teal/30" : ""}`}>
                 <CardContent className="p-4">
                   <div className="flex items-center gap-4">
-                    {/* Identity */}
-                    <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center text-xs font-bold text-foreground shrink-0">
-                      {account.name.slice(0, 2).toUpperCase()}
+                    {/* Avatar */}
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${account.health === "champion" ? "bg-v-teal/10 text-v-teal" : "bg-secondary text-foreground"}`}>
+                      {account.health === "champion"
+                        ? <Star className="w-4 h-4" />
+                        : account.name.slice(0, 2).toUpperCase()
+                      }
                     </div>
 
                     <div className="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-5 gap-3 items-center">
@@ -135,39 +133,48 @@ export default function Accounts() {
                       <div className="sm:col-span-2 min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <p className="text-sm font-semibold text-foreground truncate">{account.name}</p>
-                          {account.isMIA && (
-                            <Badge variant="danger" className="text-[10px]">MIA</Badge>
+                          {account.isMIA && <Badge variant="danger" className="text-[10px]">MIA</Badge>}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                          {account.contactName}
+                          {account.contactTitle && account.contactTitle !== "TBD — look up in CRM" && (
+                            <span className="text-muted-foreground/60"> · {account.contactTitle}</span>
                           )}
-                        </div>
-                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                          <span className="text-xs text-muted-foreground">{account.contactName} · {account.contactTitle}</span>
-                        </div>
-                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                          <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                            <MapPin className="w-2.5 h-2.5" />{account.country} · {account.vertical}
-                          </span>
+                        </p>
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <MapPin className="w-2.5 h-2.5 text-muted-foreground/50" />
+                          <span className="text-[10px] text-muted-foreground">{account.country} · {account.vertical}</span>
                         </div>
                       </div>
 
-                      {/* MRR */}
+                      {/* Billing MRR */}
                       <div>
-                        <p className="text-xs text-muted-foreground">MRR</p>
+                        <p className="text-xs text-muted-foreground">Billing MRR</p>
                         <p className="text-sm font-bold text-foreground">{formatCurrency(account.mrr)}</p>
                         <div className="flex items-center gap-1">
-                          {mrrChg > 0 ? <TrendingUp className="w-3 h-3 text-v-green" /> : mrrChg < 0 ? <TrendingDown className="w-3 h-3 text-v-red" /> : <Minus className="w-3 h-3 text-muted-foreground" />}
+                          {mrrChg > 0
+                            ? <TrendingUp className="w-3 h-3 text-v-green" />
+                            : mrrChg < 0
+                            ? <TrendingDown className="w-3 h-3 text-v-red" />
+                            : <Minus className="w-3 h-3 text-muted-foreground" />
+                          }
                           <span className={`text-[10px] font-medium ${mrrChg > 0 ? "text-v-green" : mrrChg < 0 ? "text-v-red" : "text-muted-foreground"}`}>
                             {mrrChg > 0 ? "+" : ""}{mrrChg}% QoQ
                           </span>
                         </div>
                       </div>
 
-                      {/* Badges */}
+                      {/* Status */}
                       <div className="space-y-1">
-                        <div><Badge variant={health.variant}>{health.label}</Badge></div>
-                        <div className="flex items-center gap-1">
-                          <BrainCircuit className={`w-3 h-3 ${ai.color}`} />
-                          <span className={`text-[10px] font-medium ${ai.color}`}>{ai.label}</span>
+                        <div className="flex items-center gap-1.5">
+                          <Badge variant={health.variant}>{health.label}</Badge>
                         </div>
+                        {account.aiAdoption !== "none" && (
+                          <div className="flex items-center gap-1">
+                            <BrainCircuit className="w-3 h-3 text-v-blue" />
+                            <span className="text-[10px] font-medium text-v-blue">{account.products.length} AI product{account.products.length !== 1 ? "s" : ""}</span>
+                          </div>
+                        )}
                         <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
                           <Clock className="w-2.5 h-2.5" />
                           {days}d since meeting
@@ -185,7 +192,7 @@ export default function Accounts() {
                               </linearGradient>
                             </defs>
                             <Tooltip
-                              formatter={(v: number) => [formatCurrency(v), "MRR"]}
+                              formatter={(v: number) => [formatCurrency(v), "Billing"]}
                               contentStyle={{ borderRadius: 6, border: "1px solid #e5e7eb", fontSize: 10 }}
                             />
                             <Area
@@ -201,17 +208,75 @@ export default function Accounts() {
                       </div>
                     </div>
 
-                    <Button variant="ghost" size="icon" onClick={() => navigate(`/outreach?account=${account.id}`)}>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </Button>
+                    {/* Actions */}
+                    <div className="flex items-center gap-1">
+                      {hasBreakdown && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setExpanded(isExpanded ? null : account.id)}
+                          title="Product breakdown"
+                        >
+                          {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <Package className="w-3.5 h-3.5 text-muted-foreground" />}
+                        </Button>
+                      )}
+                      <Button variant="ghost" size="icon" onClick={() => navigate(`/outreach?account=${account.id}`)}>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
                   </div>
 
-                  {/* Products */}
-                  <div className="mt-2 flex flex-wrap gap-1 pl-12">
-                    {account.products.map(p => (
-                      <span key={p} className="text-[10px] px-1.5 py-0.5 rounded bg-secondary text-muted-foreground">{p}</span>
-                    ))}
-                  </div>
+                  {/* AI products row */}
+                  {account.products.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1 pl-12">
+                      {account.products.map(p => (
+                        <span key={p} className="text-[10px] px-1.5 py-0.5 rounded bg-v-blue/10 text-v-blue font-medium">{p}</span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Expanded product billing breakdown */}
+                  {isExpanded && hasBreakdown && (
+                    <div className="mt-3 ml-12 rounded-xl border border-border bg-secondary/30 overflow-hidden">
+                      <div className="px-4 py-2 border-b border-border bg-secondary/50">
+                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Product Billing Breakdown — Mar 2026</p>
+                      </div>
+                      <div className="divide-y divide-border">
+                        {account.productBreakdown!
+                          .filter(p => p.mrr > 0)
+                          .map(p => {
+                            const inclRate = p.mrr > 0 ? Math.round(p.commissionable / p.mrr * 100) : 0;
+                            return (
+                              <div key={p.name} className="flex items-center justify-between px-4 py-2 text-xs">
+                                <div className="min-w-0">
+                                  <p className="font-medium text-foreground truncate">{p.name}</p>
+                                  {p.category && <p className="text-[10px] text-muted-foreground">{p.category}</p>}
+                                </div>
+                                <div className="flex items-center gap-3 shrink-0 ml-3">
+                                  <span className="font-semibold">{formatCurrency(p.mrr)}</span>
+                                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                                    inclRate >= 90 ? "bg-v-teal/10 text-v-teal"
+                                    : inclRate >= 40 ? "bg-v-amber/10 text-v-amber"
+                                    : "bg-v-red/10 text-v-red"
+                                  }`}>
+                                    {inclRate}% comm.
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })
+                        }
+                      </div>
+                      <div className="px-4 py-2 border-t border-border bg-secondary/50 flex items-center justify-between text-xs font-semibold">
+                        <span>Total Billing</span>
+                        <span>{formatCurrency(account.productBreakdown!.reduce((s, p) => s + (p.mrr > 0 ? p.mrr : 0), 0))}</span>
+                      </div>
+                      <div className="px-4 py-2 border-t border-border flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground">Commissionable</span>
+                        <span className="font-semibold text-v-teal">{formatCurrency(account.productBreakdown!.reduce((s, p) => s + p.commissionable, 0))}</span>
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             );

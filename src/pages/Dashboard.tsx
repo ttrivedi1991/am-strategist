@@ -97,7 +97,7 @@ export default function Dashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle>Book Revenue Trend</CardTitle>
-                  <p className="text-xs text-muted-foreground mt-1">Monthly billings · Channel partners · Oct 2025–Mar 2026 actuals (BigQuery)</p>
+                  <p className="text-xs text-muted-foreground mt-1">Billing MRR · Channel partners · Oct 2025–Mar 2026</p>
                 </div>
                 <Badge variant={revenueChange >= 0 ? "success" : "danger"}>
                   {revenueChange > 0 ? "+" : ""}{revenueChange}% QoQ
