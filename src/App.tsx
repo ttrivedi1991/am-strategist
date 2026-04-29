@@ -8,6 +8,7 @@ import OrgIntelligence from "@/pages/OrgIntelligence";
 import OutreachPlanner from "@/pages/OutreachPlanner";
 import MIARecovery from "@/pages/MIARecovery";
 import WeeklyBrief from "@/pages/WeeklyBrief";
+import PendingDeactivations from "@/pages/PendingDeactivations";
 
 export default function App() {
   return (
@@ -22,6 +23,7 @@ export default function App() {
           <Route path="outreach" element={<OutreachPlanner />} />
           <Route path="mia" element={<MIARecovery />} />
           <Route path="brief" element={<WeeklyBrief />} />
+          <Route path="deactivations" element={<PendingDeactivations />} />
         </Route>
       </Routes>
     </BrowserRouter>
