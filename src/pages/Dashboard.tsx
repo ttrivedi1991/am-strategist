@@ -46,7 +46,7 @@ export default function Dashboard() {
               Book declined $31K Oct–Jan, recovered in Feb–Mar — but the core book is still contracting
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              $334K (Oct) → $303K (Jan low) → $315K (Mar actual) · Recovery driven by SM Marketing International joining at $15K · Underlying book ex-SMM: ~$300K · 4 accounts churned · UWM down $22K · Fiska collapsed 64% in March.
+              $335K (Oct) → $313K (Jan low) → $325K (Mar actual) · Recovery driven by SM Marketing International joining at $15K · Underlying book ex-SMM: ~$310K · 4 accounts churned · UWM down $22K · Fiska collapsed 64% in March.
             </p>
           </div>
         </div>
