@@ -21,7 +21,8 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { accounts, orgAlerts, selectedAM } = useAM();
   const totalMRR = accounts.reduce((s, a) => s + a.mrr, 0);
-  // QoQ: compare Mar 2026 (current) to Dec 2025 (Q4 close) — AMs are paid on QoQ growth
+  // QoQ: compare Apr 2026 (current) to Jan 2026 (Q1 close) — AMs are paid on QoQ growth
+  // revenueHistory index [2] = Jan 2026 in the Nov 2025–Apr 2026 array
   const totalMRRQ4 = accounts.reduce((s, a) => s + (a.revenueHistory[2]?.mrr ?? 0), 0);
   const activeAccounts = accounts.filter(a => a.mrr > 0); // churned accounts excluded from active metrics
   const miaCount = activeAccounts.filter(a => a.isMIA).length;
@@ -34,7 +35,7 @@ export default function Dashboard() {
     <div className="animate-fade-in">
       <Header
         title={`Good morning, ${selectedAM.name.split(" ")[0]} 👋`}
-        subtitle="Here's your strategic overview for the week of April 27, 2026"
+        subtitle="Here's your strategic overview for the week of April 29, 2026"
       />
 
       <div className="p-6 space-y-6">
@@ -43,10 +44,10 @@ export default function Dashboard() {
           <TrendingDown className="w-4 h-4 text-v-red mt-0.5 shrink-0" />
           <div>
             <p className="text-sm font-semibold text-foreground">
-              Book declined $31K Oct–Jan, recovered in Feb–Mar — but the core book is still contracting
+              April MRR dropped $48.7K to $240.9K — Telkom alone -$55K, CoStar -$24K, UWM recovered +$40.7K
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              $335K (Oct) → $313K (Jan low) → $325K (Mar actual) · Recovery driven by SM Marketing International joining at $15K · Underlying book ex-SMM: ~$310K · 4 accounts churned · UWM down $22K · Fiska collapsed 64% in March.
+              Source: f_billing_partner_snpm (Looker "Recurring Subscriptions Billing") · QoQ vs Jan 2026 ($298.7K): -19.3% · Telkom drop requires immediate investigation · CoStar billing needs explanation before May QBR
             </p>
           </div>
         </div>
@@ -97,7 +98,7 @@ export default function Dashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle>Book Revenue Trend</CardTitle>
-                  <p className="text-xs text-muted-foreground mt-1">Billing MRR · Channel partners · Oct 2025–Mar 2026</p>
+                  <p className="text-xs text-muted-foreground mt-1">Recurring MRR · Channel partners · Nov 2025–Apr 2026 · f_billing_partner_snpm</p>
                 </div>
                 <Badge variant={revenueChange >= 0 ? "success" : "danger"}>
                   {revenueChange > 0 ? "+" : ""}{revenueChange}% QoQ
