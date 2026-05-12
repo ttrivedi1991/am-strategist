@@ -43,10 +43,10 @@ function getReEngagementEmail(account: Account): string {
   const days = daysSince(account.lastMeeting);
 
   if (account.health === "churning") {
-    return `Hi ${firstName},\n\nI'll be honest — I haven't heard from you in a while and I'm not sure if something's gone wrong on our end.\n\nI genuinely value ${account.name} as a partner and I want to make sure you're getting value from what we're doing together. Can we get 20 minutes this week? I'd love to hear how things are going and show you what's been working for similar businesses.\n\nNo pitch — just a conversation.\n\nTanvi`;
+    return `Hi ${firstName},\n\nI'll be honest — I haven't heard from you in a while and I'm not sure if something's gone wrong on our end.\n\nI genuinely value ${account.name} as a partner and I want to make sure you're getting value from what we're doing together. Can we get 20 minutes this week? I'd love to hear how things are going and show you what's been working for similar businesses.\n\nNo pitch — just a conversation.\n\nTanmay`;
   }
 
-  return `Hi ${firstName},\n\nIt's been about ${days} days since we last connected, and I wanted to reach out with something I thought you'd actually find useful.\n\nThis month, ${account.name}'s online reviews have continued to come in — and I noticed a few patterns worth discussing. I put together a quick 2-minute overview that I think you'll want to see.\n\nWould you have 15 minutes this week? Happy to work around your schedule.\n\nBest,\nTanvi`;
+  return `Hi ${firstName},\n\nIt's been about ${days} days since we last connected, and I wanted to reach out with something I thought you'd actually find useful.\n\nThis month, ${account.name}'s online reviews have continued to come in — and I noticed a few patterns worth discussing. I put together a quick 2-minute overview that I think you'll want to see.\n\nWould you have 15 minutes this week? Happy to work around your schedule.\n\nBest,\nTanmay`;
 }
 
 export default function MIARecovery() {

@@ -249,7 +249,7 @@ export default function Accounts() {
                   {isExpanded && hasBreakdown && (
                     <div className="mt-3 ml-12 rounded-xl border border-border bg-secondary/30 overflow-hidden">
                       <div className="px-4 py-2 border-b border-border bg-secondary/50">
-                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Product Billing Breakdown — Mar 2026</p>
+                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Product Billing Breakdown — Apr 2026</p>
                       </div>
                       <div className="divide-y divide-border">
                         {account.productBreakdown!

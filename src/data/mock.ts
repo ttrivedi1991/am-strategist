@@ -224,6 +224,7 @@ export const ACCOUNTS: Account[] = [
     aiAdoption: "none",
     lastMeeting: "2026-02-20",
     lastActivity: "2026-02-21",
+    isMIA: true,
     products: [],
     productBreakdown: [{ name: "Enterprise 2026", category: "Vendasta Platform", mrr: 41400.0, commissionable: 39330.0 }, { name: "Social Marketing Pro", category: "Other", mrr: 22740.56, commissionable: 21603.53 }],
     website: "uwm.com",
@@ -675,7 +676,7 @@ export const ACCOUNTS: Account[] = [
     productBreakdown: [{ name: "Reputation AI Pro", category: "Other", mrr: 615.6, commissionable: 584.82 }, { name: "Professional Subscription", category: "Vendasta Platform", mrr: 538.0, commissionable: 511.1 }],
     website: "fiska.ca",
     notes: "Slight recovery — $1.1K in April vs $1.1K in March. MRR collapsed from $3.3K (Dec) to $1.1K in March — 64% drop. Now holding flat at low. Aisha is reachable. Needs an honest conversation about the account's future direction.",
-    isMIA: false,
+    isMIA: true,
     onboardedDate: "2023-09-01",
     revenueHistory: [
       { week: "Nov 25", mrr: 3286 }, { week: "Dec 25", mrr: 3337 }, { week: "Jan 26", mrr: 3363 }, { week: "Feb 26", mrr: 2973 }, { week: "Mar 26", mrr: 1083 }, { week: "Apr 26", mrr: 1154 },

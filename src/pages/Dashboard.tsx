@@ -35,22 +35,36 @@ export default function Dashboard() {
     <div className="animate-fade-in">
       <Header
         title={`Good morning, ${selectedAM.name.split(" ")[0]} 👋`}
-        subtitle="Here's your strategic overview for the week of April 29, 2026"
+        subtitle={`Here's your strategic overview for the week of ${new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}`}
       />
 
       <div className="p-6 space-y-6">
         {/* Book Health Warning */}
-        <div className="flex items-start gap-3 p-4 rounded-xl bg-v-red/5 border border-v-red/20">
-          <TrendingDown className="w-4 h-4 text-v-red mt-0.5 shrink-0" />
-          <div>
-            <p className="text-sm font-semibold text-foreground">
-              April MRR dropped $48.7K to $240.9K — Telkom alone -$55K, CoStar -$24K, UWM recovered +$40.7K
-            </p>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Source: f_billing_partner_snpm (Looker "Recurring Subscriptions Billing") · QoQ vs Jan 2026 ($298.7K): -19.3% · Telkom drop requires immediate investigation · CoStar billing needs explanation before May QBR
-            </p>
+        {revenueChange < 0 ? (
+          <div className="flex items-start gap-3 p-4 rounded-xl bg-v-red/5 border border-v-red/20">
+            <TrendingDown className="w-4 h-4 text-v-red mt-0.5 shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-foreground">
+                Book MRR is down {Math.abs(revenueChange).toFixed(1)}% QoQ — {formatCurrency(totalMRR)} vs {formatCurrency(totalMRRQ4)} in Jan 2026
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Source: f_billing_partner_snpm · Apr 2026 actuals vs Jan 2026 baseline
+              </p>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="flex items-start gap-3 p-4 rounded-xl bg-v-teal/5 border border-v-teal/20">
+            <TrendingUp className="w-4 h-4 text-v-teal mt-0.5 shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-foreground">
+                Book MRR is up {revenueChange.toFixed(1)}% QoQ — {formatCurrency(totalMRR)} vs {formatCurrency(totalMRRQ4)} in Jan 2026
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Source: f_billing_partner_snpm · Apr 2026 actuals vs Jan 2026 baseline
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Stats Row */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -58,7 +72,7 @@ export default function Dashboard() {
             label="Total MRR"
             value={formatCurrency(totalMRR)}
             change={revenueChange}
-            changeLabel="vs Q4 2025 (QoQ)"
+            changeLabel="vs Jan 2026 (QoQ)"
             icon={DollarSign}
             iconColor="text-v-blue"
             onClick={() => navigate("/accounts")}

@@ -50,7 +50,7 @@ const SEQUENCE: OutreachStep[] = [
 export default function OutreachPlanner() {
   const [searchParams] = useSearchParams();
   const { accounts } = useAM();
-  const accountId = searchParams.get("accountId");
+  const accountId = searchParams.get("account");
   const account = accounts.find(a => a.id === accountId) || accounts[0];
   
   const [expandedStep, setExpandedStep] = useState<number | null>(0);
