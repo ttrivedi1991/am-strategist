@@ -3106,7 +3106,7 @@ export const AI_ADOPTION_DATA: Record<string, { month: string; withAI: number; n
   { month: "Jan 26", withAI: 12, noAI: 20 },
   { month: "Feb 26", withAI: 12, noAI: 20 },
   { month: "Mar 26", withAI: 14, noAI: 18 },
-  { month: "Apr 26", withAI: 11, noAI: 21 }
+  { month: "Apr 26", withAI: 16, noAI: 16 }
 ],
   desiree: [
   { month: "Jan 26", withAI: 23, noAI: 13 },
