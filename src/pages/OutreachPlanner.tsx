@@ -1,311 +1,210 @@
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Header } from "@/components/layout/Header";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { type Account, type OrgAlert } from "@/data/mock";
-import { formatDate, daysSince } from "@/lib/utils";
-import { useAM } from "@/context/AMContext";
 import { formatCurrency } from "@/lib/utils";
+import { useAM } from "@/context/AMContext";
 import {
   Send, Mail, Calendar, Sparkles, Copy, CheckCircle2,
-  ChevronDown, ChevronRight, Clock, Target, Zap, DollarSign
+  ChevronDown, ChevronRight, Clock, Users
 } from "lucide-react";
 
 interface OutreachStep {
   day: number;
   channel: "email" | "gchat" | "call" | "linkedin";
-  action: string;
   subject?: string;
   body?: string;
+  action: string;
 }
 
-function generateOutreachPlan(accountId: string, accounts: Account[], orgAlerts: OrgAlert[]): { strategy: string; steps: OutreachStep[] } {
-  const account = accounts.find(a => a.id === accountId);
-  if (!account) return { strategy: "", steps: [] };
-
-  const alert = orgAlerts.find(a => a.accountId === accountId);
-  const days = daysSince(account.lastMeeting);
-  // First name only — handles "Jamie / Brad / Todd" style entries gracefully
-  const firstName = account.contactName.split(/[\s/]/)[0].trim();
-  const lastMeetingFormatted = new Date(account.lastMeeting).toLocaleDateString("en-US", { month: "long", day: "numeric" });
-
-  // Brendan King sent a "Strategic Discussion: 2026 AI Roadmap" email to all partners on March 20
-  const ceoEmailRef = "Brendan's note from March 20";
-
-  let strategyText = "";
-  if (account.mrr === 0 || account.health === "churning") {
-    strategyText = `Churn recovery. Revenue has collapsed — the goal is a direct conversation about root cause before any product discussion. Don't pitch. Ask questions.`;
-  } else if (account.isMIA || days > 45) {
-    strategyText = `MIA re-engagement. Last contact was ${days} days ago. Primary goal is booking a meeting — not selling. Reference the existing relationship and use ${ceoEmailRef} as a natural re-entry point.`;
-  } else if (account.health === "at-risk") {
-    strategyText = `Retention. MRR is declining. Find out if this is product fit, budget, or an internal change at their org — then respond to what you hear, not what you assumed.`;
-  } else if (account.health === "champion") {
-    strategyText = `Expansion. Account is growing and the contact is engaged. Use this momentum to discuss what's next — ${account.aiAdoption === "none" ? "AI activation is the obvious next conversation" : "product depth or additional use cases"}.`;
-  } else {
-    strategyText = `Proactive check-in. Account is stable but not growing. Identify one expansion angle tied to their vertical or a product gap in what they're running today.`;
+const SEQUENCE: OutreachStep[] = [
+  { 
+    day: 1, 
+    channel: "gchat", 
+    action: "Internal Check-in",
+    body: "Hey [Contact], I noticed your MRR dropped slightly in the April billing run. Wanted to check in and see if that's a contract change or if there's anything I can help with on my end?"
+  },
+  { 
+    day: 3, 
+    channel: "email", 
+    action: "Value-Forward Outreach",
+    subject: "Strategic Update: [Vertical] AI Benchmarks",
+    body: "Hi [Name],\n\nI was looking at the latest performance data for [Account] and noticed a great trend in your review response rate. However, I think we have an opportunity to automate this further using the new AI Review Responder templates we just launched.\n\nAre you free for 10 minutes on Thursday to walk through how this could save your team ~5 hours a week?\n\nBest,\nTanmay"
+  },
+  { 
+    day: 7, 
+    channel: "call", 
+    action: "Executive Save Call",
+  },
+  { 
+    day: 10, 
+    channel: "email", 
+    action: "Follow-up / Roadmap Sync",
+    subject: "Following up: AI Roadmap for [Account]",
+    body: "Hi [Name],\n\nJust following up on my previous note. With the Q2 roadmap now finalized, I'd love to align our priorities with your growth goals for the next 90 days.\n\nTalk soon,\nTanmay"
   }
-
-  const email1Body = () => {
-    if (account.mrr === 0) {
-      return `${firstName},\n\nWanted to connect before too much time passes — your account went to zero and I'd rather understand why than assume.\n\nIs there 20 minutes to talk through what happened?\n\nTanmay`;
-    }
-    if (account.isMIA || days > 45) {
-      const alertLine = alert ? `I also saw the news about ${alert.title.split(":").slice(-1)[0].trim().toLowerCase()} — that adds some urgency to the conversation.` : "";
-      return `${firstName},\n\nWe haven't spoken since ${lastMeetingFormatted}. That's longer than I'd like, especially given where things are trending on your account.\n\n${alertLine ? alertLine + "\n\n" : ""}${ceoEmailRef} laid out our 2026 AI roadmap — I want to make sure the parts relevant to ${account.name} don't get lost in the noise. 20 minutes this week?\n\nTanmay`;
-    }
-    if (account.health === "champion") {
-      return `${firstName},\n\nYour account is moving in the right direction and I want to make sure we're intentional about what comes next.\n\n${ceoEmailRef} covered the 2026 roadmap at a high level. There are two or three things in there that map directly to where ${account.name} is heading — worth 20 minutes to go through them?\n\nTanmay`;
-    }
-    if (alert) {
-      return `${firstName},\n\nSaw ${alert.title.split(":").slice(-1)[0].trim().toLowerCase()} and wanted to reach out directly.\n\nWe've been working together long enough that I want to make sure the timing on your end still makes sense. Are you free for a quick call this week?\n\nTanmay`;
-    }
-    return `${firstName},\n\nFollowing up on ${ceoEmailRef} about our 2026 AI roadmap. Rather than forward the deck, I'd rather walk through what's actually relevant to ${account.name}.\n\nAre you free for 20 minutes this week?\n\nTanmay`;
-  };
-
-  const email3Body = () => {
-    const productLine = account.products.length > 0
-      ? `You're currently running ${account.products.slice(0, 2).join(" and ")}. There's a specific capability that layers on top of that I want to show you.`
-      : `There's a capability in the platform that fits your setup well — I want to walk through it specifically.`;
-    const verticalLine = account.health === "at-risk"
-      ? `Other ${account.vertical} partners who were in a similar position have used it to stabilize and then grow.`
-      : `${account.vertical} is one of the verticals where we're seeing the clearest results right now.`;
-    return `${firstName},\n\n${productLine}\n\n${verticalLine}\n\n15-minute screen share — no slides, no deck. Just the platform and what it looks like for your account specifically. Happy to fit around your schedule this week or next.\n\nTanmay`;
-  };
-
-  const gchatBody = () =>
-    `Hey ${firstName} — sent you an email earlier this week. Let me know if it's easier to connect here. Happy to send a calendar invite if that's simpler.`;
-
-  const voicemailBody = () =>
-    `Hi ${firstName}, it's Tanmay from Vendasta. I've sent a couple of notes — I have a specific ask I'd rather make on a call than over email. I'll try again in a few days, or feel free to grab time on my calendar. Thanks.`;
-
-  const email5Body = () =>
-    `${firstName},\n\nI'll step back on the outreach — I don't want to crowd your inbox if the timing isn't right.\n\nWhen things shift, you know where to find me.\n\nTanmay`;
-
-  const email1Subject = account.mrr === 0
-    ? `${account.name} — quick question`
-    : (account.isMIA || days > 45)
-    ? `Checking in — ${account.name}`
-    : alert
-    ? `${account.name} — wanted to connect`
-    : `2026 roadmap — what's relevant for ${account.name}`;
-
-  return {
-    strategy: `${strategyText} Contact: ${account.contactName} (${account.contactTitle}). ${alert ? `Intel signal: ${alert.title}.` : ""}`,
-    steps: [
-      {
-        day: 1,
-        channel: "email",
-        action: account.isMIA || days > 45 ? "Re-engagement email — direct ask, existing relationship context" : "Proactive email — reference CEO roadmap note as the hook",
-        subject: email1Subject,
-        body: email1Body(),
-      },
-      {
-        day: 3,
-        channel: "gchat",
-        action: "GChat nudge if no reply",
-        body: gchatBody(),
-      },
-      {
-        day: 6,
-        channel: "email",
-        action: "Product-specific email — tied to their current stack and vertical",
-        subject: `${account.vertical} partners + what's changed in Q2`,
-        body: email3Body(),
-      },
-      {
-        day: 10,
-        channel: "call",
-        action: "Direct call — voicemail script if no answer",
-        body: voicemailBody(),
-      },
-      {
-        day: 18,
-        channel: "email",
-        action: "Close the loop — no pressure, leave the door open",
-        subject: `Re: ${account.name}`,
-        body: email5Body(),
-      },
-    ],
-  };
-}
-
-const CHANNEL_ICONS = { email: Mail, gchat: Zap, call: Clock, linkedin: Target };
-const CHANNEL_COLORS = { email: "text-v-blue", gchat: "text-v-green", call: "text-v-amber", linkedin: "text-v-teal" };
-const CHANNEL_LABELS = { email: "Email", gchat: "GChat", call: "Phone Call", linkedin: "LinkedIn" };
+];
 
 export default function OutreachPlanner() {
-  const { accounts, orgAlerts } = useAM();
-  const [params] = useSearchParams();
-  const defaultAccountId = params.get("account") || accounts[0]?.id || "";
-  const [selectedId, setSelectedId] = useState(defaultAccountId);
+  const [searchParams] = useSearchParams();
+  const { accounts } = useAM();
+  const accountId = searchParams.get("accountId");
+  const account = accounts.find(a => a.id === accountId) || accounts[0];
+  
+  const [expandedStep, setExpandedStep] = useState<number | null>(0);
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
-  const [expanded, setExpanded] = useState<number>(0);
 
-  const planRef = useRef<HTMLDivElement>(null);
-  const account = accounts.find(a => a.id === selectedId) || accounts[0];
-  const plan = generateOutreachPlan(account?.id || "", accounts, orgAlerts);
-  const alert = orgAlerts.find(a => a.accountId === account?.id);
-
-  // Scroll plan panel to top and reset expanded step whenever account changes
-  useEffect(() => {
-    setExpanded(0);
-    planRef.current?.scrollTo({ top: 0, behavior: "smooth" });
-  }, [selectedId]);
-
-  function copyBody(text: string, idx: number) {
-    navigator.clipboard.writeText(text || "").then(() => {
-      setCopiedIdx(idx);
-      setTimeout(() => setCopiedIdx(null), 2000);
-    });
-  }
+  const copyToClipboard = (text: string, idx: number) => {
+    navigator.clipboard.writeText(text);
+    setCopiedIdx(idx);
+    setTimeout(() => setCopiedIdx(null), 2000);
+  };
 
   return (
     <div className="animate-fade-in">
-      <Header title="Outreach Planner" subtitle="Multi-touch sequences built around existing relationships and current account context" />
+      <Header 
+        title="Outreach Planner" 
+        subtitle={`Multi-touch sequence for ${account.name}`}
+      />
 
-      <div className="p-6">
-        <div className="flex flex-col lg:flex-row gap-5">
-          {/* Account Selector */}
-          <div className="lg:w-72 shrink-0 space-y-1">
-            <p className="text-xs font-semibold text-muted-foreground px-1 mb-2">SELECT ACCOUNT</p>
-            {accounts
-              .filter(a => a.mrr > 0)
-              .sort((a, b) => {
-                // Priority sort: MIA first, then at-risk, then by MRR
-                if (a.isMIA && !b.isMIA) return -1;
-                if (!a.isMIA && b.isMIA) return 1;
-                if (a.health === "at-risk" && b.health !== "at-risk") return -1;
-                if (a.health !== "at-risk" && b.health === "at-risk") return 1;
-                return b.mrr - a.mrr;
-              })
-              .map(a => (
-                <button
-                  key={a.id}
-                  onClick={() => setSelectedId(a.id)}
-                  className={`w-full text-left px-3 py-2.5 rounded-lg border transition-all ${
-                    selectedId === a.id
-                      ? "border-primary bg-primary/5 shadow-sm"
-                      : "border-transparent hover:border-border hover:bg-secondary/50"
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <div className={`w-6 h-6 rounded flex items-center justify-center text-[10px] font-bold shrink-0 ${
-                      a.health === "champion" ? "bg-v-teal/10 text-v-teal"
-                      : a.health === "at-risk" || a.isMIA ? "bg-v-red/10 text-v-red"
-                      : "bg-secondary text-foreground"
-                    }`}>
-                      {a.name.slice(0, 2)}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-medium text-foreground truncate">{a.name}</p>
-                      <p className="text-[10px] text-muted-foreground truncate">{a.contactName} · {formatCurrency(a.mrr)}</p>
-                    </div>
-                    {a.isMIA && <Badge variant="danger" className="text-[9px] shrink-0">MIA</Badge>}
-                    {!a.isMIA && a.health === "at-risk" && <Badge variant="warning" className="text-[9px] shrink-0">Risk</Badge>}
-                  </div>
-                </button>
-              ))
-            }
-          </div>
-
-          {/* Plan */}
-          <div ref={planRef} className="flex-1 space-y-4 overflow-y-auto">
-            {/* Account Header */}
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-start gap-3 flex-wrap">
-                  <div className="w-10 h-10 rounded-lg bg-secondary flex items-center justify-center text-sm font-bold text-foreground shrink-0">
-                    {account.name.slice(0, 2)}
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-sm font-bold text-foreground">{account.name}</p>
-                      {account.isMIA && <Badge variant="danger">MIA</Badge>}
-                      {alert && <Badge variant="warning">Signal: {alert.type}</Badge>}
-                    </div>
-                    <p className="text-xs text-muted-foreground">{account.contactName} · {account.contactTitle} · {account.vertical}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">Last meeting: {formatDate(account.lastMeeting)} ({daysSince(account.lastMeeting)} days ago)</p>
-                  </div>
+      <div className="p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Account Context */}
+        <div className="lg:col-span-1 space-y-6">
+          <Card>
+            <CardContent className="p-5 space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center text-lg">
+                  {account.name[0]}
                 </div>
-
-                {alert && (
-                  <div className="mt-3 p-3 rounded-lg bg-v-amber/5 border border-v-amber/20">
-                    <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 mb-0.5">
-                      <Sparkles className="w-3.5 h-3.5" />
-                      Intelligence Trigger
-                    </div>
-                    <p className="text-xs text-foreground">{alert.title} — {alert.actionSuggestion}</p>
-                  </div>
-                )}
-
-                <div className="mt-3 p-3 rounded-lg bg-v-purple/5 border border-v-purple/20">
-                  <div className="flex items-center gap-1.5 text-xs font-semibold text-v-purple mb-0.5">
-                    <Target className="w-3.5 h-3.5" />
-                    Strategy
-                  </div>
-                  <p className="text-xs text-foreground">{plan.strategy}</p>
+                <div>
+                  <h2 className="text-sm font-semibold text-foreground">{account.name}</h2>
+                  <p className="text-xs text-muted-foreground">{account.contactName} · {account.contactTitle}</p>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
 
-            {/* Steps */}
-            <div className="space-y-2">
-              {plan.steps.map((step, idx) => {
-                const Icon = CHANNEL_ICONS[step.channel];
-                const color = CHANNEL_COLORS[step.channel];
-                const isOpen = expanded === idx;
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <div className="p-2 rounded-lg bg-secondary/50 border border-border">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">MRR (Apr)</p>
+                  <p className="text-sm font-bold text-foreground">{formatCurrency(account.mrr)}</p>
+                </div>
+                <div className="p-2 rounded-lg bg-secondary/50 border border-border">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Health</p>
+                  <Badge variant={account.health === "healthy" || account.health === "champion" ? "success" : account.health === "at-risk" ? "warning" : "danger"}>
+                    {account.health}
+                  </Badge>
+                </div>
+              </div>
 
+              <div className="space-y-1.5">
+                <p className="text-xs font-medium text-foreground">Current Products</p>
+                <div className="flex flex-wrap gap-1">
+                  {account.products.length > 0 ? (
+                    account.products.map(p => (
+                      <Badge key={p} variant="outline" className="text-[10px] px-1.5 py-0">
+                        {p}
+                      </Badge>
+                    ))
+                  ) : (
+                    <span className="text-xs text-muted-foreground italic">No AI products active</span>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-v-blue/20 bg-v-blue/5">
+            <CardContent className="p-5 space-y-3">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-v-blue" />
+                <h3 className="text-sm font-semibold text-foreground">AI Strategy Tip</h3>
+              </div>
+              <p className="text-xs text-foreground leading-relaxed">
+                {account.health === "churning" || account.health === "at-risk" 
+                  ? "Focus on stability first. Reference the recent billing drop and ask for a 'health check' meeting rather than pitching new products."
+                  : account.aiAdoption === "none"
+                  ? "This account is a prime candidate for the AI Receptionist v3.0 pilot. Use the multi-language support as a hook."
+                  : "Champion account — ask for a referral to another department or business unit during your next sync."}
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Sequence Timeline */}
+        <div className="lg:col-span-2">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <Clock className="w-4 h-4 text-muted-foreground" />
+                Recommended Sequence
+              </h2>
+              <Badge variant="outline">4 touches · 10 days</Badge>
+            </div>
+
+            <div className="space-y-3 relative before:absolute before:left-[19px] before:top-4 before:bottom-4 before:w-px before:bg-border">
+              {SEQUENCE.map((step, idx) => {
+                const isExpanded = expandedStep === idx;
                 return (
-                  <Card key={idx} className={`transition-all ${isOpen ? "border-primary/30" : ""}`}>
-                    <button
-                      className="w-full text-left p-4"
-                      onClick={() => setExpanded(isOpen ? -1 : idx)}
+                  <Card key={idx} className="relative ml-10 overflow-hidden">
+                    <div className="absolute left-[-41px] top-4 w-6 h-6 rounded-full bg-background border-2 border-border flex items-center justify-center text-[10px] font-bold text-muted-foreground z-10">
+                      {step.day}
+                    </div>
+                    
+                    <button 
+                      onClick={() => setExpandedStep(isExpanded ? null : idx)}
+                      className="w-full flex items-center justify-between p-4 hover:bg-secondary/30 transition-colors text-left"
                     >
                       <div className="flex items-center gap-3">
-                        <div className={`w-7 h-7 rounded-full border-2 border-current flex items-center justify-center shrink-0 ${color}`}>
-                          <span className="text-[10px] font-bold">{idx + 1}</span>
+                        <div className={cn(
+                          "w-8 h-8 rounded-lg flex items-center justify-center shrink-0",
+                          step.channel === "email" ? "bg-v-blue/10 text-v-blue" :
+                          step.channel === "gchat" ? "bg-v-green/10 text-v-green" :
+                          step.channel === "call" ? "bg-v-red/10 text-v-red" : "bg-v-purple/10 text-v-purple"
+                        )}>
+                          {step.channel === "email" ? <Mail className="w-4 h-4" /> :
+                           step.channel === "gchat" ? <Send className="w-4 h-4" /> :
+                           step.channel === "call" ? <Phone className="w-4 h-4" /> : <Users className="w-4 h-4" />}
                         </div>
-                        <div className="flex items-center gap-2 flex-1 min-w-0">
-                          <Icon className={`w-3.5 h-3.5 ${color} shrink-0`} />
-                          <span className="text-xs font-semibold text-foreground">Day {step.day}</span>
-                          <Badge variant="outline" className="text-[10px]">{CHANNEL_LABELS[step.channel]}</Badge>
-                          <span className="text-xs text-muted-foreground truncate">{step.action}</span>
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">{step.action}</p>
+                          <p className="text-xs text-muted-foreground capitalize">{step.channel} · Day {step.day}</p>
                         </div>
-                        {isOpen ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
                       </div>
+                      {isExpanded ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
                     </button>
 
-                    {isOpen && (
-                      <div className="px-4 pb-4 space-y-3 animate-fade-in">
-                        {step.subject && (
+                    {isExpanded && step.body && (
+                      <div className="px-4 pb-4 animate-in fade-in slide-in-from-top-1 duration-200">
+                        <div className="p-3 rounded-lg bg-secondary/50 border border-border space-y-3">
+                          {step.subject && (
+                            <div className="border-b border-border pb-2">
+                              <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-tight">Subject</p>
+                              <p className="text-sm text-foreground">{step.subject.replace("[Account]", account.name).replace("[Vertical]", account.vertical)}</p>
+                            </div>
+                          )}
                           <div>
-                            <p className="text-xs text-muted-foreground mb-1">Subject Line</p>
-                            <p className="text-sm font-medium text-foreground bg-secondary/50 px-3 py-2 rounded-lg">{step.subject}</p>
+                            <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-tight mb-1">Message Body</p>
+                            <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
+                              {step.body
+                                .replace("[Name]", account.contactName.split(" ")[0])
+                                .replace("[Account]", account.name)
+                                .replace("[Contact]", account.contactName.split(" ")[0])
+                                .replace("[Vertical]", account.vertical)}
+                            </p>
                           </div>
-                        )}
-                        {step.body && (
-                          <div>
-                            <p className="text-xs text-muted-foreground mb-1">Message</p>
-                            <pre className="text-xs text-foreground bg-secondary/50 px-3 py-2.5 rounded-lg whitespace-pre-wrap font-sans leading-relaxed">{step.body}</pre>
-                          </div>
-                        )}
-                        <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => copyBody(step.body || "", idx)}
-                          >
+                        </div>
+                        <div className="flex items-center gap-2 mt-4">
+                          <Button size="sm" variant="outline" onClick={() => copyToClipboard(step.body || "", idx)}>
                             {copiedIdx === idx ? <><CheckCircle2 className="w-3.5 h-3.5 text-v-green" /> Copied</> : <><Copy className="w-3.5 h-3.5" /> Copy</>}
                           </Button>
                           {step.channel === "email" && (
-                            <Button size="sm" onClick={() => window.open(`mailto:${account.contactEmail}?subject=${encodeURIComponent(step.subject || "")}&body=${encodeURIComponent(step.body || "")}`)}>
+                            <Button size="sm" onClick={() => window.open(`mailto:${account.contactEmail}?subject=${encodeURIComponent(step.subject?.replace("[Account]", account.name).replace("[Vertical]", account.vertical) || "")}&body=${encodeURIComponent(step.body?.replace("[Name]", account.contactName.split(" ")[0]).replace("[Account]", account.name).replace("[Contact]", account.contactName.split(" ")[0]).replace("[Vertical]", account.vertical) || "")}`)}>
                               <Mail className="w-3.5 h-3.5" /> Open in Gmail
                             </Button>
                           )}
                           {step.channel === "gchat" && (
-                            <Button size="sm" variant="success">
+                            <Button size="sm">
                               <Send className="w-3.5 h-3.5" /> Open GChat
                             </Button>
                           )}
@@ -325,5 +224,28 @@ export default function OutreachPlanner() {
         </div>
       </div>
     </div>
+  );
+}
+
+function cn(...classes: any[]) {
+  return classes.filter(Boolean).join(" ");
+}
+
+function Phone(props: any) {
+  return (
+    <svg
+      {...props}
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+    </svg>
   );
 }

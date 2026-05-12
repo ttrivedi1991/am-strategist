@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAM } from "@/context/AMContext";
 import {
-  FileText, Sparkles, ArrowRight, Zap, Target, Users,
+  Sparkles, ArrowRight, Zap, Target, Users,
   ChevronDown, ChevronUp, ClipboardPaste, Loader2
 } from "lucide-react";
 
@@ -53,8 +53,8 @@ function parseBriefToActions(brief: string, accounts: import("@/data/mock").Acco
   if (hasAIReceptionist) {
     const targets = accounts.filter(a =>
       (a.aiAdoption === "none" || a.aiAdoption === "basic") &&
-      (hasHomeServices ? a.vertical === "Home Services" : true) ||
-      (hasLegal ? a.vertical === "Legal" : false)
+      ((hasHomeServices ? a.vertical === "Home Services Tech" : true) ||
+      (hasLegal ? a.vertical === "Digital Marketing" : false))
     ).slice(0, 3);
 
     targets.forEach(a => {
@@ -69,7 +69,7 @@ function parseBriefToActions(brief: string, accounts: import("@/data/mock").Acco
   }
 
   if (hasReviewResponder) {
-    const targets = accounts.filter(a => ["Restaurants", "Automotive", "Healthcare"].includes(a.vertical) && a.aiAdoption !== "power").slice(0, 2);
+    const targets = accounts.filter(a => ["Hospitality Tech", "Automotive Tech", "Healthcare Tech"].includes(a.vertical) && a.aiAdoption !== "power").slice(0, 2);
     targets.forEach(a => {
       actions.push({
         account: a.name,

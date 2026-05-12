@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { AM_ROSTER } from "@/data/mock";
 import { useAM } from "@/context/AMContext";
 import {
-  LayoutDashboard, Users, BrainCircuit, Bell, Send, UserX, FileText, Zap, ChevronUp, Check
+  LayoutDashboard, Users, BrainCircuit, Bell, Send, UserX, FileText, Zap, ChevronUp, Check, LogOut
 } from "lucide-react";
 
 const NAV = [
@@ -24,8 +24,14 @@ const AVATAR_COLORS: Record<string, string> = {
 };
 
 export function Sidebar() {
-  const { selectedAM, setSelectedAM } = useAM();
+  const { selectedAM, setSelectedAM, logout } = useAM();
   const [open, setOpen] = useState(false);
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate("/login");
+  };
 
   return (
     <aside className="fixed inset-y-0 left-0 z-40 w-56 flex flex-col bg-v-navy border-r border-white/10">
@@ -65,6 +71,17 @@ export function Sidebar() {
           </NavLink>
         ))}
       </nav>
+
+      {/* Logout */}
+      <div className="px-2 py-2">
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all text-white/60 hover:text-white hover:bg-white/8 group"
+        >
+          <LogOut className="w-4 h-4 shrink-0 text-white/50 group-hover:text-white/80" />
+          <span>Logout</span>
+        </button>
+      </div>
 
       {/* AM Switcher */}
       <div className="p-3 border-t border-white/10 relative">

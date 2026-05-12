@@ -118,7 +118,7 @@ export default function Dashboard() {
                   <XAxis dataKey="week" tick={{ fontSize: 10, fill: "#9ca3af" }} tickLine={false} axisLine={false} />
                   <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} tickLine={false} axisLine={false} tickFormatter={v => `$${(v / 1000).toFixed(0)}K`} />
                   <Tooltip
-                    formatter={(v: number) => [formatCurrency(v), "MRR"]}
+                    formatter={(v: any) => [formatCurrency(v as number), "MRR"]}
                     contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 12 }}
                   />
                   <Area type="monotone" dataKey="mrr" stroke="#EF4444" strokeWidth={2} fill="url(#mrrGrad)" dot={false} activeDot={{ r: 4 }} />

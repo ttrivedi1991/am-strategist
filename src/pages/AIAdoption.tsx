@@ -11,7 +11,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, PieChart, Pie, Cell
 } from "recharts";
-import { BrainCircuit, CheckCircle2, ArrowRight, TrendingUp } from "lucide-react";
+import { CheckCircle2, ArrowRight, TrendingUp } from "lucide-react";
 
 export default function AIAdoption() {
   const navigate = useNavigate();

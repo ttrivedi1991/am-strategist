@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Header } from "@/components/layout/Header";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatDate, daysSince, formatCurrency } from "@/lib/utils";
@@ -26,13 +26,13 @@ function getReEngagementHook(account: Account): string {
   if (account.health === "churning") {
     return `${account.name} hasn't engaged in ${daysSince(account.lastMeeting)} days and revenue is declining. Send a personal video or executive escalation before they churn.`;
   }
-  if (account.vertical === "Healthcare") {
+  if (account.vertical === "Healthcare Tech") {
     return `Dr. ${account.contactName.split(" ")[1]} is likely heads-down. Try an async loom or a "3 things I noticed about your reputation this month" email — no ask, just value.`;
   }
-  if (account.vertical === "Real Estate") {
+  if (account.vertical === "PropTech") {
     return `New VP of Marketing just joined GreenLeaf. Cold reset — intro email to Nina Patel as a fresh start, not a follow-up.`;
   }
-  if (account.vertical === "Fitness") {
+  if (account.vertical === "Home Services Tech") {
     return `Cassandra expressed frustration before going dark. Acknowledge it directly — "I heard your concern and wanted to share what we've done about it."`;
   }
   return `${account.contactName} hasn't responded in ${daysSince(account.lastMeeting)} days. A value-forward email with a specific stat about their account ("your reviews grew X%") tends to cut through.`;

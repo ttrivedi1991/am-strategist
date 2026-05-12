@@ -192,7 +192,7 @@ export default function Accounts() {
                               </linearGradient>
                             </defs>
                             <Tooltip
-                              formatter={(v: number) => [formatCurrency(v), "Billing"]}
+                              formatter={(v: any) => [formatCurrency(v as number), "Billing"]}
                               contentStyle={{ borderRadius: 6, border: "1px solid #e5e7eb", fontSize: 10 }}
                             />
                             <Area
