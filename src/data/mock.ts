@@ -229,7 +229,6 @@ export const ACCOUNTS: Account[] = [
     productBreakdown: [{ name: "Enterprise 2026", category: "Vendasta Platform", mrr: 41400.0, commissionable: 39330.0 }, { name: "Social Marketing Pro", category: "Social", mrr: 22740.56, commissionable: 21603.53 }],
     website: "uwm.com",
     notes: "Major recovery — UWM surged from $23.4K (March) to $64.1K in April (+$40.7K). The Enterprise 2026 plan ($41.4K) is fully active alongside $22.7K in Social Marketing Pro. This appears to be a contract renewal or new SKU activation. Sarah DeCiantis (sdeciantis@uwm.com) — book a call to confirm the account structure and discuss expansion.",
-    isMIA: false,
     onboardedDate: "2022-09-01",
     revenueHistory: [
       { week: "Nov 25", mrr: 64984 }, { week: "Dec 25", mrr: 52547 }, { week: "Jan 26", mrr: 41400 }, { week: "Feb 26", mrr: 22413 }, { week: "Mar 26", mrr: 23363 }, { week: "Apr 26", mrr: 64141 },

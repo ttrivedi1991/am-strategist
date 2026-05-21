@@ -22,6 +22,10 @@ export function Header({ title, subtitle }: HeaderProps) {
         <span className="text-xs text-muted-foreground hidden sm:block">
           Week of {formatDate(new Date())}
         </span>
+        <span className="text-[10px] text-muted-foreground hidden sm:flex items-center gap-1 px-2 py-0.5 rounded-full border border-border bg-secondary">
+          <span className="w-1.5 h-1.5 rounded-full bg-v-teal inline-block" />
+          Data: Apr 2026 · BigQuery
+        </span>
 
         {(urgentAlerts > 0 || miaCount > 0) && (
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-v-red/10 text-v-red text-xs font-medium animate-pulse">

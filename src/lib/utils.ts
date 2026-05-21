@@ -23,3 +23,9 @@ export function pctChange(current: number, previous: number): number {
   if (previous === 0) return 0;
   return Math.round(((current - previous) / previous) * 100);
 }
+
+// Returns Jan 2026 MRR from the 6-month history array — used for QoQ baseline.
+// Looks up by label so it's robust to array length changes.
+export function getQoQBaseMRR(history: { week: string; mrr: number }[]): number {
+  return history.find(h => h.week === "Jan 26")?.mrr ?? history[2]?.mrr ?? 0;
+}

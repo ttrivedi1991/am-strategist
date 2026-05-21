@@ -3,7 +3,7 @@ import { StatCard } from "@/components/ui/stat-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { formatCurrency, pctChange } from "@/lib/utils";
+import { formatCurrency, pctChange, getQoQBaseMRR } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { useAM } from "@/context/AMContext";
 import {
@@ -23,7 +23,7 @@ export default function Dashboard() {
   const totalMRR = accounts.reduce((s, a) => s + a.mrr, 0);
   // QoQ: compare Apr 2026 (current) to Jan 2026 (Q1 close) — AMs are paid on QoQ growth
   // revenueHistory index [2] = Jan 2026 in the Nov 2025–Apr 2026 array
-  const totalMRRQ4 = accounts.reduce((s, a) => s + (a.revenueHistory[2]?.mrr ?? 0), 0);
+  const totalMRRQ4 = accounts.reduce((s, a) => s + getQoQBaseMRR(a.revenueHistory), 0);
   const activeAccounts = accounts.filter(a => a.mrr > 0); // churned accounts excluded from active metrics
   const miaCount = activeAccounts.filter(a => a.isMIA).length;
   const aiPowerCount = activeAccounts.filter(a => a.aiAdoption === "power" || a.aiAdoption === "growth").length;

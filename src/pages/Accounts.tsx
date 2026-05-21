@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { type Account } from "@/data/mock";
-import { formatCurrency, daysSince, pctChange } from "@/lib/utils";
+import { formatCurrency, daysSince, pctChange, getQoQBaseMRR } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { useAM } from "@/context/AMContext";
 import {
@@ -109,7 +109,7 @@ export default function Accounts() {
         {/* Account Cards */}
         <div className="space-y-2">
           {filtered.map(account => {
-            const decMRR = account.revenueHistory[2]?.mrr ?? 0;
+            const decMRR = getQoQBaseMRR(account.revenueHistory);
             const mrrChg = decMRR > 0 ? pctChange(account.mrr, decMRR) : 0;
             const days = daysSince(account.lastMeeting);
             const health = healthBadge[account.health];
@@ -246,10 +246,16 @@ export default function Accounts() {
                   )}
 
                   {/* Expanded product billing breakdown */}
-                  {isExpanded && hasBreakdown && (
+                  {isExpanded && hasBreakdown && (() => {
+                    const breakdownTotal = account.productBreakdown!.reduce((s, p) => s + (p.mrr > 0 ? p.mrr : 0), 0);
+                    const gap = Math.abs(breakdownTotal - account.mrr);
+                    const gapPct = account.mrr > 0 ? gap / account.mrr : 0;
+                    const hasGap = gap > 100 && gapPct > 0.03;
+                    return (
                     <div className="mt-3 ml-12 rounded-xl border border-border bg-secondary/30 overflow-hidden">
-                      <div className="px-4 py-2 border-b border-border bg-secondary/50">
+                      <div className="px-4 py-2 border-b border-border bg-secondary/50 flex items-center justify-between">
                         <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Product Billing Breakdown — Apr 2026</p>
+                        <span className="text-[10px] text-muted-foreground">BigQuery · f_billing_partner_snpm</span>
                       </div>
                       <div className="divide-y divide-border">
                         {account.productBreakdown!
@@ -279,14 +285,21 @@ export default function Accounts() {
                       </div>
                       <div className="px-4 py-2 border-t border-border bg-secondary/50 flex items-center justify-between text-xs font-semibold">
                         <span>Total Billing</span>
-                        <span>{formatCurrency(account.productBreakdown!.reduce((s, p) => s + (p.mrr > 0 ? p.mrr : 0), 0))}</span>
+                        <span>{formatCurrency(breakdownTotal)}</span>
                       </div>
+                      {hasGap && (
+                        <div className="px-4 py-2 border-t border-v-amber/30 bg-v-amber/5 flex items-center justify-between text-xs">
+                          <span className="text-v-amber font-medium">⚠ Breakdown vs book MRR gap</span>
+                          <span className="text-v-amber font-semibold">{formatCurrency(gap)} ({Math.round(gapPct * 100)}%)</span>
+                        </div>
+                      )}
                       <div className="px-4 py-2 border-t border-border flex items-center justify-between text-xs">
                         <span className="text-muted-foreground">Commissionable</span>
                         <span className="font-semibold text-v-teal">{formatCurrency(account.productBreakdown!.reduce((s, p) => s + p.commissionable, 0))}</span>
                       </div>
                     </div>
-                  )}
+                    );
+                  })()}
                 </CardContent>
               </Card>
             );
