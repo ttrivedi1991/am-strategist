@@ -24,7 +24,7 @@ function getRiskLevel(account: Account): "critical" | "high" | "medium" {
 
 function getReEngagementHook(account: Account): string {
   if (account.health === "churning") {
-    return `${account.name} hasn't engaged in ${daysSince(account.lastMeeting)} days and revenue is declining. Send a personal video or executive escalation before they churn.`;
+    return `${account.name} hasn't engaged in ${daysSince(account.lastMeeting)} days and billing is declining. Send a personal video or executive escalation before they churn.`;
   }
   if (account.vertical === "Healthcare Tech") {
     return `Dr. ${account.contactName.split(" ")[1]} is likely heads-down. Try an async loom or a "3 things I noticed about your reputation this month" email — no ask, just value.`;
@@ -69,7 +69,7 @@ export default function MIARecovery() {
     <div className="animate-fade-in">
       <Header
         title="MIA Recovery"
-        subtitle={`${miaAccounts.length} partners gone dark · ${formatCurrency(totalMRRAtRisk)} MRR at risk`}
+        subtitle={`${miaAccounts.length} partners gone dark · ${formatCurrency(totalMRRAtRisk)} billings at risk`}
       />
 
       <div className="p-6 space-y-6">
@@ -81,7 +81,7 @@ export default function MIARecovery() {
               {miaAccounts.length} partners have had no meeting in {MIA_THRESHOLD}+ days
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              MIA definition: no meeting scheduled or completed in 45 days AND no revenue change (activation or deactivation). These accounts need proactive re-engagement now.
+              MIA definition: no meeting scheduled or completed in 45 days AND no billing change (activation or deactivation). These accounts need proactive re-engagement now.
             </p>
           </div>
         </div>
@@ -118,7 +118,7 @@ export default function MIARecovery() {
                           </Badge>
                           {declining && (
                             <div className="flex items-center gap-1 text-xs text-v-red">
-                              <TrendingDown className="w-3 h-3" /> Revenue declining
+                              <TrendingDown className="w-3 h-3" /> Billing declining
                             </div>
                           )}
                         </div>

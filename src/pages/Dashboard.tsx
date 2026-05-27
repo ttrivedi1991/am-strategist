@@ -45,7 +45,7 @@ export default function Dashboard() {
             <TrendingDown className="w-4 h-4 text-v-red mt-0.5 shrink-0" />
             <div>
               <p className="text-sm font-semibold text-foreground">
-                Book MRR is down {Math.abs(revenueChange).toFixed(1)}% QoQ — {formatCurrency(totalMRR)} vs {formatCurrency(totalMRRQ4)} in Jan 2026
+                Book billings are down {Math.abs(revenueChange).toFixed(1)}% QoQ — {formatCurrency(totalMRR)} vs {formatCurrency(totalMRRQ4)} in Jan 2026
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Source: f_billing_partner_snpm · Apr 2026 actuals vs Jan 2026 baseline
@@ -57,7 +57,7 @@ export default function Dashboard() {
             <TrendingUp className="w-4 h-4 text-v-teal mt-0.5 shrink-0" />
             <div>
               <p className="text-sm font-semibold text-foreground">
-                Book MRR is up {revenueChange.toFixed(1)}% QoQ — {formatCurrency(totalMRR)} vs {formatCurrency(totalMRRQ4)} in Jan 2026
+                Book billings are up {revenueChange.toFixed(1)}% QoQ — {formatCurrency(totalMRR)} vs {formatCurrency(totalMRRQ4)} in Jan 2026
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Source: f_billing_partner_snpm · Apr 2026 actuals vs Jan 2026 baseline
@@ -69,7 +69,7 @@ export default function Dashboard() {
         {/* Stats Row */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
-            label="Total MRR"
+            label="Total Billings"
             value={formatCurrency(totalMRR)}
             change={revenueChange}
             changeLabel="vs Jan 2026 (QoQ)"
@@ -111,8 +111,8 @@ export default function Dashboard() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>Book Revenue Trend</CardTitle>
-                  <p className="text-xs text-muted-foreground mt-1">Recurring MRR · Channel partners · Nov 2025–Apr 2026 · f_billing_partner_snpm</p>
+                  <CardTitle>Book Billings Trend</CardTitle>
+                  <p className="text-xs text-muted-foreground mt-1">Recurring Billings · Channel partners · Nov 2025–Apr 2026 · f_billing_partner_snpm</p>
                 </div>
                 <Badge variant={revenueChange >= 0 ? "success" : "danger"}>
                   {revenueChange > 0 ? "+" : ""}{revenueChange}% QoQ
@@ -132,7 +132,7 @@ export default function Dashboard() {
                   <XAxis dataKey="week" tick={{ fontSize: 10, fill: "#9ca3af" }} tickLine={false} axisLine={false} />
                   <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} tickLine={false} axisLine={false} tickFormatter={v => `$${(v / 1000).toFixed(0)}K`} />
                   <Tooltip
-                    formatter={(v: any) => [formatCurrency(v as number), "MRR"]}
+                    formatter={(v: any) => [formatCurrency(v as number), "Billings"]}
                     contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 12 }}
                   />
                   <Area type="monotone" dataKey="mrr" stroke="#EF4444" strokeWidth={2} fill="url(#mrrGrad)" dot={false} activeDot={{ r: 4 }} />
