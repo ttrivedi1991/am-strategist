@@ -33,7 +33,8 @@ export default function OrgIntelligence() {
   const [filter, setFilter] = useState<"all" | OrgAlert["urgency"]>("all");
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  const filtered = filter === "all" ? orgAlerts : orgAlerts.filter(a => a.urgency === filter);
+  const filtered = (filter === "all" ? orgAlerts : orgAlerts.filter(a => a.urgency === filter))
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()); // Newest first
 
   return (
     <div className="animate-fade-in">
