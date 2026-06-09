@@ -8,6 +8,7 @@ import OrgIntelligence from "@/pages/OrgIntelligence";
 import OutreachPlanner from "@/pages/OutreachPlanner";
 import MIARecovery from "@/pages/MIARecovery";
 import WeeklyBrief from "@/pages/WeeklyBrief";
+import Commission from "@/pages/Commission";
 import Login from "@/pages/Login";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -39,6 +40,7 @@ export default function App() {
           <Route path="outreach" element={<OutreachPlanner />} />
           <Route path="mia" element={<MIARecovery />} />
           <Route path="brief" element={<WeeklyBrief />} />
+          <Route path="commission" element={<Commission />} />
         </Route>
       </Routes>
     </BrowserRouter>
