@@ -257,46 +257,55 @@ export default function Accounts() {
                         <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Product Billing Breakdown — Apr 2026</p>
                         <span className="text-[10px] text-muted-foreground">BigQuery · f_billing_partner_snpm</span>
                       </div>
+
+                      {/* Header row */}
+                      <div className="px-4 py-2 bg-secondary/40 flex items-center text-[10px] font-semibold text-muted-foreground">
+                        <div className="flex-1">Product</div>
+                        <div className="w-28 text-right">Billings</div>
+                        <div className="w-32 text-right">Commissionable</div>
+                        <div className="w-16 text-right">Incl. Rate</div>
+                      </div>
+
                       <div className="divide-y divide-border">
                         {account.productBreakdown!
                           .filter(p => p.mrr > 0)
                           .map(p => {
                             const inclRate = p.mrr > 0 ? Math.round(p.commissionable / p.mrr * 100) : 0;
                             return (
-                              <div key={p.name} className="flex items-center justify-between px-4 py-2 text-xs">
-                                <div className="min-w-0">
+                              <div key={p.name} className="flex items-center px-4 py-2 text-xs">
+                                <div className="flex-1 min-w-0">
                                   <p className="font-medium text-foreground truncate">{p.name}</p>
                                   {p.category && <p className="text-[10px] text-muted-foreground">{p.category}</p>}
                                 </div>
-                                <div className="flex items-center gap-3 shrink-0 ml-3">
-                                  <span className="font-semibold">{formatCurrency(p.mrr)}</span>
-                                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
-                                    inclRate >= 90 ? "bg-v-teal/10 text-v-teal"
-                                    : inclRate >= 40 ? "bg-v-amber/10 text-v-amber"
-                                    : "bg-v-red/10 text-v-red"
-                                  }`}>
-                                    {inclRate}% comm.
-                                  </span>
+                                <div className="w-28 text-right font-semibold">{formatCurrency(p.mrr)}</div>
+                                <div className="w-32 text-right font-semibold text-v-teal">{formatCurrency(p.commissionable)}</div>
+                                <div className={`w-16 text-right text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                                  inclRate >= 90 ? "bg-v-teal/10 text-v-teal"
+                                  : inclRate >= 40 ? "bg-v-amber/10 text-v-amber"
+                                  : "bg-v-red/10 text-v-red"
+                                }`}>
+                                  {inclRate}%
                                 </div>
                               </div>
                             );
                           })
                         }
                       </div>
-                      <div className="px-4 py-2 border-t border-border bg-secondary/50 flex items-center justify-between text-xs font-semibold">
-                        <span>Total Billing</span>
-                        <span>{formatCurrency(breakdownTotal)}</span>
+
+                      {/* Totals row */}
+                      <div className="px-4 py-2 border-t border-border bg-secondary/50 flex items-center text-xs font-semibold">
+                        <div className="flex-1">Total</div>
+                        <div className="w-28 text-right">{formatCurrency(breakdownTotal)}</div>
+                        <div className="w-32 text-right text-v-teal">{formatCurrency(account.productBreakdown!.reduce((s, p) => s + p.commissionable, 0))}</div>
+                        <div className="w-16"></div>
                       </div>
+
                       {hasGap && (
                         <div className="px-4 py-2 border-t border-v-amber/30 bg-v-amber/5 flex items-center justify-between text-xs">
                           <span className="text-v-amber font-medium">⚠ Breakdown vs book MRR gap</span>
                           <span className="text-v-amber font-semibold">{formatCurrency(gap)} ({Math.round(gapPct * 100)}%)</span>
                         </div>
                       )}
-                      <div className="px-4 py-2 border-t border-border flex items-center justify-between text-xs">
-                        <span className="text-muted-foreground">Commissionable</span>
-                        <span className="font-semibold text-v-teal">{formatCurrency(account.productBreakdown!.reduce((s, p) => s + p.commissionable, 0))}</span>
-                      </div>
                     </div>
                     );
                   })()}
