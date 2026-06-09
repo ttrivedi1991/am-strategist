@@ -21,8 +21,12 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { accounts, orgAlerts, selectedAM } = useAM();
   const totalMRR = accounts.reduce((s, a) => s + a.mrr, 0);
-  // QoQ: compare Apr 2026 (current) to Jan 2026 (Q1 close) — AMs are paid on QoQ growth
-  // revenueHistory index [2] = Jan 2026 in the Nov 2025–Apr 2026 array
+
+  // Get latest month from revenueTrend (last entry)
+  const latestTrend = selectedAM.revenueTrend[selectedAM.revenueTrend.length - 1];
+  const latestMonth = latestTrend?.week ?? "May 26";
+
+  // QoQ: compare current month to Jan 2026 (Q1 close) — AMs are paid on QoQ growth
   const totalMRRQ4 = accounts.reduce((s, a) => s + getQoQBaseMRR(a.revenueHistory), 0);
   const activeAccounts = accounts.filter(a => a.mrr > 0); // churned accounts excluded from active metrics
   const miaCount = activeAccounts.filter(a => a.isMIA).length;
@@ -48,7 +52,7 @@ export default function Dashboard() {
                 Book billings are down {Math.abs(revenueChange).toFixed(1)}% QoQ — {formatCurrency(totalMRR)} vs {formatCurrency(totalMRRQ4)} in Jan 2026
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Source: f_billing_partner_snpm · Apr 2026 actuals vs Jan 2026 baseline
+                Source: f_billing_partner_snpm · {latestMonth} actuals vs Jan 2026 baseline
               </p>
             </div>
           </div>
@@ -60,7 +64,7 @@ export default function Dashboard() {
                 Book billings are up {revenueChange.toFixed(1)}% QoQ — {formatCurrency(totalMRR)} vs {formatCurrency(totalMRRQ4)} in Jan 2026
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Source: f_billing_partner_snpm · Apr 2026 actuals vs Jan 2026 baseline
+                Source: f_billing_partner_snpm · {latestMonth} actuals vs Jan 2026 baseline
               </p>
             </div>
           </div>
@@ -112,7 +116,7 @@ export default function Dashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle>Book Billings Trend</CardTitle>
-                  <p className="text-xs text-muted-foreground mt-1">Recurring Billings · Channel partners · Nov 2025–Apr 2026 · f_billing_partner_snpm</p>
+                  <p className="text-xs text-muted-foreground mt-1">Recurring Billings · Channel partners · Nov 2025–{latestMonth} · f_billing_partner_snpm</p>
                 </div>
                 <Badge variant={revenueChange >= 0 ? "success" : "danger"}>
                   {revenueChange > 0 ? "+" : ""}{revenueChange}% QoQ
@@ -145,7 +149,7 @@ export default function Dashboard() {
           <Card>
             <CardHeader>
               <CardTitle>Quota Progress</CardTitle>
-              <p className="text-xs text-muted-foreground">April 2026</p>
+              <p className="text-xs text-muted-foreground">{latestMonth}</p>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex flex-col items-center py-2">
