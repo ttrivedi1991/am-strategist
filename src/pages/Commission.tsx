@@ -80,9 +80,9 @@ export default function Commission() {
     return totalBilling > 0 ? totalComm / totalBilling : 0.95;
   }
 
-  // Existing partners = onboarded before Q2 (Feb 1, 2026). New partners excluded from growth calc per plan.
+  // Existing partners = onboarded before Q2 (Apr 1, 2026). New partners excluded from growth calc per plan.
   const existingPartners = accounts.filter(
-    a => a.mrr > 0 && new Date(a.onboardedDate) < new Date("2026-02-01")
+    a => a.mrr > 0 && new Date(a.onboardedDate) < new Date("2026-04-01")
   );
 
   // Monthly commissionable $ for a cohort at a given revenueHistory index (Onboarding excluded)
@@ -97,41 +97,77 @@ export default function Commission() {
     }, 0);
   }
 
-  // Q2 2026: Feb=idx3, Mar=idx4, Apr=idx5. Baseline: Jan=idx2
+  // History indices: Nov25=0, Dec25=1, Jan26=2, Feb26=3, Mar26=4, Apr26=5, May26=6
   const janComm = monthlyComm(existingPartners, 2);
   const febComm = monthlyComm(existingPartners, 3);
-  const marComm = monthlyComm(existingPartners, 4);
+  const marComm = monthlyComm(existingPartners, 4); // Q2 baseline (Q1 ending book)
   const aprComm = monthlyComm(existingPartners, 5);
+  const mayComm = monthlyComm(existingPartners, 6);
 
-  const febGrowth = febComm - janComm;
-  const marGrowth = marComm - febComm;
+  // Q2 2026 WAMGR: Apr and May actuals (June TBD)
+  // WAMGR = Net Quarterly Growth / sum of starting values each month
   const aprGrowth = aprComm - marComm;
-  const netQuarterlyGrowth = febGrowth + marGrowth + aprGrowth;
+  const mayGrowth = mayComm - aprComm;
+  const partialNetGrowth = aprGrowth + mayGrowth; // Jun growth unknown
+  const partialStartingBase = marComm + aprComm;  // Mar + Apr starting values (2 of 3 months)
+  const wamgr = partialStartingBase > 0 ? partialNetGrowth / partialStartingBase : 0;
 
-  // WAMGR = Net Quarterly Growth / sum of starting values (Jan + Feb + Mar)
-  const startingBase = janComm + febComm + marComm;
-  const wamgr = startingBase > 0 ? netQuarterlyGrowth / startingBase : 0;
+  // June estimate: flat at May (conservative)
+  const junCommEst = mayComm;
 
-  // Book under management = sum of ending values each month (Feb + Mar + Apr)
-  const bookUnderManagement = febComm + marComm + aprComm;
+  // Book under management Q2 = Apr + May + Jun (using Jun estimate)
+  const bookUnderManagement = aprComm + mayComm + junCommEst;
   const currentTier = getCommissionTier(wamgr);
   const nextTier = getNextCommissionTier(wamgr);
 
   const bookGrowthCommission = currentTier.rate * bookUnderManagement;
+
+  // Additional June growth needed to reach next tier
+  const fullBase = marComm + aprComm + mayComm;
   const additionalCommNeededForNextTier = nextTier
-    ? (nextTier.wamgr - wamgr) * startingBase
+    ? nextTier.wamgr * fullBase - partialNetGrowth
     : 0;
   const additionalCommissionAtNextTier = nextTier
     ? (nextTier.rate - currentTier.rate) * bookUnderManagement
     : 0;
 
   // ── Logo Retention ──────────────────────────────────────────────────────────
-  const activeAccounts = accounts.filter(a => a.mrr > 0);
-  const retainedAccounts = activeAccounts.filter(a => a.health !== "churning");
-  const logoRetentionPct = activeAccounts.length > 0 ? retainedAccounts.length / activeAccounts.length : 1;
+  // Rule: cohort = partners with billing > $0 in a given month, assigned to Tanmay.
+  // Cancelled = billing goes to $0. Average monthly retention across Q2 (Apr, May, Jun est).
+  // History indices: Mar=4, Apr=5, May=6
+
+  function countRetained(prevIdx: number, currIdx: number) {
+    return accounts.filter(a =>
+      (a.revenueHistory[prevIdx]?.mrr ?? 0) > 0 &&
+      (a.revenueHistory[currIdx]?.mrr ?? 0) > 0
+    ).length;
+  }
+
+  function countCohort(histIdx: number) {
+    return accounts.filter(a => (a.revenueHistory[histIdx]?.mrr ?? 0) > 0).length;
+  }
+
+  const marCohort = countCohort(4);  // Q2 start — denominator for April retention
+  const aprCohort = countCohort(5);  // April — denominator for May retention
+
+  const aprRetainedCount = countRetained(4, 5);
+  const mayRetainedCount = countRetained(5, 6);
+
+  const aprRetention = marCohort > 0 ? aprRetainedCount / marCohort : 1;
+  const mayRetention = aprCohort > 0 ? mayRetainedCount / aprCohort : 1;
+  const junRetentionEst = 1.0; // estimated: no further cancellations in June
+
+  const logoRetentionPct = (aprRetention + mayRetention + junRetentionEst) / 3;
   const retentionTier = getRetentionTier(logoRetentionPct);
   const nextRetentionTier = getNextRetentionTier(logoRetentionPct);
-  const churningAccounts = activeAccounts.filter(a => a.health === "churning");
+
+  // Partners who actually cancelled in Q2 — billing went to $0 during Apr or May
+  const cancelledInQ2 = accounts.filter(a => {
+    const marMrr = a.revenueHistory[4]?.mrr ?? 0;
+    const aprMrr = a.revenueHistory[5]?.mrr ?? 0;
+    const mayMrr = a.revenueHistory[6]?.mrr ?? 0;
+    return (marMrr > 0 && aprMrr === 0) || (aprMrr > 0 && mayMrr === 0);
+  });
 
   // ── Total projected commission ──────────────────────────────────────────────
   const totalProjected = bookGrowthCommission + retentionTier.bonus;
@@ -139,9 +175,11 @@ export default function Commission() {
   // ── Chart data ──────────────────────────────────────────────────────────────
   const chartData = [
     { month: "Jan 26", comm: janComm, isBaseline: true },
-    { month: "Feb 26", comm: febComm, isBaseline: false },
-    { month: "Mar 26", comm: marComm, isBaseline: false },
+    { month: "Feb 26", comm: febComm, isBaseline: true },
+    { month: "Mar 26", comm: marComm, isBaseline: true },
     { month: "Apr 26", comm: aprComm, isBaseline: false },
+    { month: "May 26", comm: mayComm, isBaseline: false },
+    { month: "Jun 26 (est)", comm: junCommEst, isEstimate: true },
   ];
 
   // ── Strategy Engine ─────────────────────────────────────────────────────────
@@ -213,7 +251,7 @@ export default function Commission() {
     <div className="animate-fade-in">
       <Header
         title="Commission Analytics"
-        subtitle={`Q2 2026 · Jan baseline · ${formatCurrency(bookUnderManagement)} book under management · ${existingPartners.length} existing partners`}
+        subtitle={`Q2 2026 · Apr–May actuals · Jun estimated · ${formatCurrency(bookUnderManagement)} book est. · ${existingPartners.length} existing partners`}
       />
 
       <div className="p-6 space-y-6">
@@ -252,7 +290,7 @@ export default function Commission() {
               <p className={`text-2xl font-bold ${logoRetentionPct >= 0.98 ? "text-v-green" : logoRetentionPct >= 0.95 ? "text-v-amber" : "text-v-red"}`}>
                 {(logoRetentionPct * 100).toFixed(1)}%
               </p>
-              <p className="text-[10px] text-muted-foreground mt-1">{retainedAccounts.length}/{activeAccounts.length} retained · {formatCurrency(retentionTier.bonus)} bonus</p>
+              <p className="text-[10px] text-muted-foreground mt-1">{cancelledInQ2.length === 0 ? "No cancellations" : `${cancelledInQ2.length} cancelled`} in Q2 · {formatCurrency(retentionTier.bonus)} bonus</p>
             </CardContent>
           </Card>
 
@@ -262,10 +300,10 @@ export default function Commission() {
                 <Target className="w-3.5 h-3.5 text-muted-foreground" />
                 <p className="text-xs font-medium text-muted-foreground">Net Quarterly Growth</p>
               </div>
-              <p className={`text-2xl font-bold ${netQuarterlyGrowth >= 0 ? "text-v-green" : "text-v-red"}`}>
-                {netQuarterlyGrowth >= 0 ? "+" : ""}{formatCurrency(netQuarterlyGrowth)}
+              <p className={`text-2xl font-bold ${partialNetGrowth >= 0 ? "text-v-green" : "text-v-red"}`}>
+                {partialNetGrowth >= 0 ? "+" : ""}{formatCurrency(partialNetGrowth)}
               </p>
-              <p className="text-[10px] text-muted-foreground mt-1">Commissionable · Feb + Mar + Apr growth</p>
+              <p className="text-[10px] text-muted-foreground mt-1">Commissionable · Apr + May vs Mar</p>
             </CardContent>
           </Card>
         </div>
@@ -299,7 +337,7 @@ export default function Commission() {
                   />
                   <Bar dataKey="comm" radius={[4, 4, 0, 0]}>
                     {chartData.map((entry, i) => (
-                      <Cell key={i} fill={entry.isBaseline ? "#d1fae5" : "#00B67A"} />
+                      <Cell key={i} fill={(entry as any).isEstimate ? "#d1d5db" : entry.isBaseline ? "#d1fae5" : "#00B67A"} />
                     ))}
                   </Bar>
                 </BarChart>
@@ -318,17 +356,17 @@ export default function Commission() {
                   </thead>
                   <tbody className="divide-y divide-border">
                     <tr className="bg-secondary/20 text-muted-foreground">
-                      <td className="px-3 py-2">Jan 26 (baseline)</td>
-                      <td className="text-right px-3 py-2 font-medium">{formatCurrency(janComm)}</td>
+                      <td className="px-3 py-2">Mar 26 (Q2 baseline)</td>
+                      <td className="text-right px-3 py-2 font-medium">{formatCurrency(marComm)}</td>
                       <td className="text-right px-3 py-2">—</td>
                       <td className="text-right px-3 py-2">—</td>
                     </tr>
                     {[
-                      { label: "Feb 26", comm: febComm, growth: febGrowth, prev: janComm },
-                      { label: "Mar 26", comm: marComm, growth: marGrowth, prev: febComm },
                       { label: "Apr 26", comm: aprComm, growth: aprGrowth, prev: marComm },
+                      { label: "May 26", comm: mayComm, growth: mayGrowth, prev: aprComm },
+                      { label: "Jun 26 (est)", comm: junCommEst, growth: junCommEst - mayComm, prev: mayComm, isEst: true },
                     ].map(row => (
-                      <tr key={row.label}>
+                      <tr key={row.label} className={(row as any).isEst ? "opacity-50 italic" : ""}>
                         <td className="px-3 py-2 font-medium">{row.label}</td>
                         <td className="text-right px-3 py-2 font-medium">{formatCurrency(row.comm)}</td>
                         <td className={`text-right px-3 py-2 font-semibold ${row.growth >= 0 ? "text-v-green" : "text-v-red"}`}>
@@ -342,10 +380,10 @@ export default function Commission() {
                   </tbody>
                   <tfoot>
                     <tr className="bg-secondary/50 font-semibold border-t-2 border-border">
-                      <td className="px-3 py-2">Net Quarterly Growth</td>
-                      <td className="text-right px-3 py-2">{formatCurrency(bookUnderManagement)} <span className="text-[10px] font-normal text-muted-foreground">(book)</span></td>
-                      <td className={`text-right px-3 py-2 ${netQuarterlyGrowth >= 0 ? "text-v-green" : "text-v-red"}`}>
-                        {netQuarterlyGrowth >= 0 ? "+" : ""}{formatCurrency(netQuarterlyGrowth)}
+                      <td className="px-3 py-2">Q2 Partial WAMGR (Apr+May)</td>
+                      <td className="text-right px-3 py-2">{formatCurrency(bookUnderManagement)} <span className="text-[10px] font-normal text-muted-foreground">(book est.)</span></td>
+                      <td className={`text-right px-3 py-2 ${partialNetGrowth >= 0 ? "text-v-green" : "text-v-red"}`}>
+                        {partialNetGrowth >= 0 ? "+" : ""}{formatCurrency(partialNetGrowth)}
                       </td>
                       <td className={`text-right px-3 py-2 ${wamgr >= 0 ? "text-v-green" : "text-v-red"}`}>
                         WAMGR {(wamgr * 100).toFixed(2)}%
@@ -466,24 +504,25 @@ export default function Commission() {
                   })}
                 </div>
 
-                {churningAccounts.length > 0 && (
+                {cancelledInQ2.length > 0 ? (
                   <div className="p-2 rounded-lg bg-v-red/5 border border-v-red/20">
                     <p className="text-[10px] font-semibold text-v-red mb-0.5">
-                      {churningAccounts.length} churning {churningAccounts.length === 1 ? "account" : "accounts"} dragging retention
+                      {cancelledInQ2.length} partner{cancelledInQ2.length !== 1 ? "s" : ""} cancelled in Q2 (billing → $0)
                     </p>
                     <p className="text-[10px] text-muted-foreground leading-relaxed">
-                      {churningAccounts.map(a => a.name).join(" · ")}
+                      {cancelledInQ2.map(a => a.name).join(" · ")}
                     </p>
+                  </div>
+                ) : (
+                  <div className="p-2 rounded-lg bg-v-teal/5 border border-v-teal/20">
+                    <p className="text-[10px] font-semibold text-v-teal">No partner cancellations in Q2 so far</p>
                   </div>
                 )}
 
-                {nextRetentionTier && (
-                  <div className="p-2 rounded-lg bg-v-amber/5 border border-v-amber/20">
-                    <p className="text-[10px] text-v-amber font-semibold">
-                      Save {Math.ceil((nextRetentionTier.pct - logoRetentionPct) * activeAccounts.length)} more account{Math.ceil((nextRetentionTier.pct - logoRetentionPct) * activeAccounts.length) !== 1 ? "s" : ""} → unlock {formatCurrency(nextRetentionTier.bonus)} bonus (+{formatCurrency(nextRetentionTier.bonus - retentionTier.bonus)})
-                    </p>
-                  </div>
-                )}
+                <div className="p-2 rounded-lg bg-secondary/50 border border-border space-y-0.5">
+                  <p className="text-[10px] font-semibold text-muted-foreground">Monthly breakdown</p>
+                  <p className="text-[10px] text-muted-foreground">Apr: {(aprRetention * 100).toFixed(1)}% · May: {(mayRetention * 100).toFixed(1)}% · Jun: {(junRetentionEst * 100).toFixed(0)}% est.</p>
+                </div>
               </CardContent>
             </Card>
           </div>
