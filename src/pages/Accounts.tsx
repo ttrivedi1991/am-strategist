@@ -254,7 +254,7 @@ export default function Accounts() {
                     return (
                     <div className="mt-3 ml-12 rounded-xl border border-border bg-secondary/30 overflow-hidden">
                       <div className="px-4 py-2 border-b border-border bg-secondary/50 flex items-center justify-between">
-                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Product Billing Breakdown — Apr 2026</p>
+                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Product Billing Breakdown — May 2026</p>
                         <span className="text-[10px] text-muted-foreground">BigQuery · f_billing_partner_snpm</span>
                       </div>
 

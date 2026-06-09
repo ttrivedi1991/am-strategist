@@ -74,7 +74,7 @@ export default function AIAdoption() {
           {/* Adoption Trend */}
           <Card className="lg:col-span-2">
             <CardHeader>
-              <CardTitle>Partners with Active AI Products — Jan to Apr 2026</CardTitle>
+              <CardTitle>Partners with Active AI Products — Jan to May 2026</CardTitle>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={220}>
@@ -161,7 +161,7 @@ export default function AIAdoption() {
               Partners with Active AI Products
             </CardTitle>
             <p className="text-xs text-muted-foreground mt-1">
-              {withAI.length} partners · BigQuery Apr 2026 actuals · sorted by product count
+              {withAI.length} partners · BigQuery May 2026 actuals · sorted by product count
             </p>
           </CardHeader>
           <CardContent className="space-y-2">
@@ -188,7 +188,7 @@ export default function AIAdoption() {
                     {/* Expanded product billing breakdown */}
                     {expandedAccount === account.id && account.productBreakdown && account.productBreakdown.length > 0 && (
                       <div className="mt-3 rounded-lg bg-background border border-border p-3">
-                        <p className="text-[10px] font-semibold text-muted-foreground mb-2 uppercase tracking-wide">Full Product Billing — Apr 2026</p>
+                        <p className="text-[10px] font-semibold text-muted-foreground mb-2 uppercase tracking-wide">Full Product Billing — May 2026</p>
                         <div className="space-y-1">
                           {account.productBreakdown
                             .filter(p => p.mrr > 0)
