@@ -10,12 +10,39 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from "recharts";
 import {
-  DollarSign, Users, BrainCircuit, AlertTriangle, ArrowRight,
+  DollarSign, AlertTriangle, ArrowRight,
   CheckCircle2, Clock, Flame, TrendingUp, TrendingDown
 } from "lucide-react";
 
 const priorityColor = { high: "danger", medium: "warning", low: "info" } as const;
 const priorityLabel = { high: "Urgent", medium: "This Week", low: "FYI" } as const;
+
+// Commission tier structure (from Jan 2026 plan)
+const COMMISSION_TIERS = [
+  { wamgr: 0.0000, rate: 0.0060, label: "0.00%" },
+  { wamgr: 0.0025, rate: 0.0090, label: "0.25%" },
+  { wamgr: 0.0050, rate: 0.0120, label: "0.50%" },
+  { wamgr: 0.0100, rate: 0.0150, label: "1.00%" },
+  { wamgr: 0.0200, rate: 0.0188, label: "2.00%" },
+  { wamgr: 0.0300, rate: 0.0225, label: "3.00%" },
+  { wamgr: 0.0500, rate: 0.0300, label: "5.00%" },
+];
+
+function getCommissionTier(wamgr: number) {
+  let current = COMMISSION_TIERS[0];
+  for (const tier of COMMISSION_TIERS) {
+    if (wamgr >= tier.wamgr) current = tier;
+    else break;
+  }
+  return current;
+}
+
+function getNextCommissionTier(wamgr: number) {
+  for (let i = 0; i < COMMISSION_TIERS.length - 1; i++) {
+    if (wamgr < COMMISSION_TIERS[i + 1].wamgr) return COMMISSION_TIERS[i + 1];
+  }
+  return null;
+}
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -26,13 +53,51 @@ export default function Dashboard() {
   const latestTrend = selectedAM.revenueTrend[selectedAM.revenueTrend.length - 1];
   const latestMonth = latestTrend?.week ?? "May 26";
 
-  // QoQ: compare current month to Jan 2026 (Q1 close) — AMs are paid on QoQ growth
-  const totalMRRQ4 = accounts.reduce((s, a) => s + getQoQBaseMRR(a.revenueHistory), 0);
-  const activeAccounts = accounts.filter(a => a.mrr > 0); // churned accounts excluded from active metrics
-  const miaCount = activeAccounts.filter(a => a.isMIA).length;
-  const aiPowerCount = activeAccounts.filter(a => a.aiAdoption === "power" || a.aiAdoption === "growth").length;
-  const quotaPct = Math.round((selectedAM.achievedMRR / selectedAM.quota) * 100);
+  // Commission calculation (Q2 2026)
+  function commRate(acc: typeof accounts[0]) {
+    const totalBilling = acc.productBreakdown.reduce((s, p) => s + (p.mrr > 0 ? p.mrr : 0), 0);
+    const totalComm = acc.productBreakdown.reduce((s, p) => s + (p.mrr > 0 ? p.commissionable : 0), 0);
+    return totalBilling > 0 ? totalComm / totalBilling : 0.95;
+  }
 
+  const existingPartners = accounts.filter(
+    a => a.mrr > 0 && new Date(a.onboardedDate) < new Date("2026-04-01")
+  );
+
+  function monthlyComm(partners: typeof accounts, histIdx: number) {
+    return partners.reduce((s, acc) => {
+      const mrr = acc.revenueHistory[histIdx]?.mrr ?? 0;
+      const rate = commRate(acc);
+      const onboarding = acc.productBreakdown
+        .filter(p => p.category === "Onboarding")
+        .reduce((s2, p) => s2 + p.commissionable, 0);
+      return s + mrr * rate - onboarding;
+    }, 0);
+  }
+
+  const marComm = monthlyComm(existingPartners, 4);
+  const aprComm = monthlyComm(existingPartners, 5);
+  const mayComm = monthlyComm(existingPartners, 6);
+  const junCommEst = mayComm;
+
+  const aprGrowth = aprComm - marComm;
+  const mayGrowth = mayComm - aprComm;
+  const partialNetGrowth = aprGrowth + mayGrowth;
+  const partialStartingBase = marComm + aprComm;
+  const wamgr = partialStartingBase > 0 ? partialNetGrowth / partialStartingBase : 0;
+
+  const bookUnderManagement = aprComm + mayComm + junCommEst;
+  const currentTier = getCommissionTier(wamgr);
+  const nextTier = getNextCommissionTier(wamgr);
+
+  const fullBase = marComm + aprComm + mayComm;
+  const additionalCommNeededForNextTier = nextTier
+    ? nextTier.wamgr * fullBase - partialNetGrowth
+    : 0;
+
+  // QoQ: compare current month to Jan 2026 (Q1 close)
+  const totalMRRQ4 = accounts.reduce((s, a) => s + getQoQBaseMRR(a.revenueHistory), 0);
+  const quotaPct = Math.round((selectedAM.achievedMRR / selectedAM.quota) * 100);
   const revenueChange = pctChange(totalMRR, totalMRRQ4);
 
   return (
@@ -70,8 +135,17 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Stats Row */}
+        {/* Commission KPIs */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatCard
+            label="WAMGR (Current)"
+            value={`${(wamgr * 100).toFixed(2)}%`}
+            changeLabel={`At ${currentTier.label} tier → ${(currentTier.rate * 100).toFixed(2)}% of book`}
+            icon={TrendingUp}
+            iconColor={wamgr >= 0.01 ? "text-v-green" : wamgr >= 0 ? "text-v-amber" : "text-v-red"}
+            trend={wamgr >= 0.01 ? "up" : "down"}
+            onClick={() => navigate("/commission")}
+          />
           <StatCard
             label="Total Billings"
             value={formatCurrency(totalMRR)}
@@ -82,31 +156,25 @@ export default function Dashboard() {
             onClick={() => navigate("/accounts")}
           />
           <StatCard
-            label="Quota Attainment"
-            value={`${quotaPct}%`}
-            changeLabel={`${formatCurrency(selectedAM.quota - selectedAM.achievedMRR)} gap`}
-            icon={TrendingUp}
-            iconColor={quotaPct >= 100 ? "text-v-green" : "text-v-amber"}
-            trend={quotaPct >= 100 ? "up" : "down"}
+            label="Commissionable $"
+            value={formatCurrency(bookUnderManagement)}
+            changeLabel="Q2 book under management"
+            icon={DollarSign}
+            iconColor="text-v-teal"
+            onClick={() => navigate("/commission")}
           />
-          <StatCard
-            label="MIA Partners"
-            value={`${miaCount}`}
-            changeLabel={`of ${activeAccounts.length} active accounts`}
-            icon={Users}
-            iconColor="text-v-red"
-            trend={miaCount > 2 ? "down" : "flat"}
-            onClick={() => navigate("/mia")}
-          />
-          <StatCard
-            label="AI Power Users"
-            value={`${aiPowerCount}`}
-            changeLabel={`of ${activeAccounts.length} active accounts`}
-            icon={BrainCircuit}
-            iconColor="text-v-purple"
-            trend="up"
-            onClick={() => navigate("/ai-adoption")}
-          />
+          <Card className="border-v-amber/30 bg-v-amber/5">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-1">
+                <AlertTriangle className="w-3.5 h-3.5 text-v-amber" />
+                <p className="text-xs font-medium text-muted-foreground">Gap to Next Tier</p>
+              </div>
+              <p className="text-2xl font-bold text-v-amber">{nextTier ? formatCurrency(Math.max(0, additionalCommNeededForNextTier)) : "At max"}</p>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                {nextTier ? `Grow commissionable to hit ${nextTier.label} WAMGR` : "You're at the highest tier!"}
+              </p>
+            </CardContent>
+          </Card>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">

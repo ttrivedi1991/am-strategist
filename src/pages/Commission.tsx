@@ -251,7 +251,7 @@ export default function Commission() {
     <div className="animate-fade-in">
       <Header
         title="Commission Analytics"
-        subtitle={`Q2 2026 · Apr–May actuals · Jun estimated · ${formatCurrency(bookUnderManagement)} book est. · ${existingPartners.length} existing partners`}
+        subtitle={`Q2 2026 · Projected: ${formatCurrency(totalProjected)} · WAMGR: ${(wamgr * 100).toFixed(2)}% (${currentTier.label} tier) · Commissionable book: ${formatCurrency(bookUnderManagement)}`}
       />
 
       <div className="p-6 space-y-6">
