@@ -34,6 +34,11 @@ export default function Accounts() {
 
   const verticals = [...new Set(accounts.map(a => a.vertical))].sort();
 
+  // Calculate total commissionable dollars
+  function commissionableForAccount(acc: typeof accounts[0]) {
+    return acc.productBreakdown.reduce((s, p) => s + (p.mrr > 0 ? p.commissionable : 0), 0);
+  }
+
   const filtered = accounts
     .filter(a => {
       const q = search.toLowerCase();
@@ -44,7 +49,8 @@ export default function Accounts() {
       );
     })
     .sort((a, b) => {
-      if (sortBy === "mrr") return b.mrr - a.mrr;
+      // Sort by commissionable dollars (most important metric)
+      if (sortBy === "mrr") return commissionableForAccount(b) - commissionableForAccount(a);
       if (sortBy === "days") return daysSince(a.lastMeeting) - daysSince(b.lastMeeting);
       const order = { churning: 0, "at-risk": 1, healthy: 2, champion: 3 };
       return order[a.health] - order[b.health];
@@ -52,12 +58,13 @@ export default function Accounts() {
 
   const activeAccounts = accounts.filter(a => a.mrr > 0);
   const totalMRR = activeAccounts.reduce((s, a) => s + a.mrr, 0);
+  const totalCommissionable = activeAccounts.reduce((s, a) => s + commissionableForAccount(a), 0);
 
   return (
     <div className="animate-fade-in">
       <Header
         title="Book of Business"
-        subtitle={`${activeAccounts.length} active accounts · ${formatCurrency(totalMRR)} billing MRR · ${accounts.length - activeAccounts.length} churned`}
+        subtitle={`${activeAccounts.length} active partners · ${formatCurrency(totalMRR)} billings · ${formatCurrency(totalCommissionable)} commissionable`}
       />
 
       <div className="p-6 space-y-4">
@@ -100,7 +107,7 @@ export default function Accounts() {
                 onClick={() => setSortBy(s)}
                 className={`px-2 py-1 rounded ${sortBy === s ? "bg-primary text-primary-foreground" : "hover:bg-secondary"}`}
               >
-                {s === "mrr" ? "Billing" : s === "days" ? "Days since meeting" : "Health"}
+                {s === "mrr" ? "Commissionable $" : s === "days" ? "Days since meeting" : "Health"}
               </button>
             ))}
           </div>
