@@ -1,9 +1,11 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Header } from "@/components/layout/Header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAM } from "@/context/AMContext";
+import { formatCurrency, commissionableMRR } from "@/lib/utils";
 import {
   Sparkles, ArrowRight, Zap, Target, Users,
   ChevronDown, ChevronUp, ClipboardPaste, Loader2
@@ -33,6 +35,8 @@ const SAMPLE_BRIEF = `## Vendasta Product Roadmap Update — Week of April 27, 2
 
 interface ActionItem {
   account: string;
+  accountId: string;
+  commissionable: number;
   action: string;
   product: string;
   urgency: "high" | "medium" | "low";
@@ -60,6 +64,8 @@ function parseBriefToActions(brief: string, accounts: import("@/data/mock").Acco
     targets.forEach(a => {
       actions.push({
         account: a.name,
+        accountId: a.id,
+        commissionable: commissionableMRR(a.productBreakdown),
         action: `Pitch AI Receptionist v3.0 upgrade${hasDoubleCommission ? " (double commission incentive expires May 31)" : ""}`,
         product: "AI Receptionist",
         urgency: hasDoubleCommission ? "high" : "medium",
@@ -73,6 +79,8 @@ function parseBriefToActions(brief: string, accounts: import("@/data/mock").Acco
     targets.forEach(a => {
       actions.push({
         account: a.name,
+        accountId: a.id,
+        commissionable: commissionableMRR(a.productBreakdown),
         action: "Demo new AI Review Responder bulk scheduling feature",
         product: "AI Review Responder",
         urgency: "medium",
@@ -86,6 +94,8 @@ function parseBriefToActions(brief: string, accounts: import("@/data/mock").Acco
     targets.forEach(a => {
       actions.push({
         account: a.name,
+        accountId: a.id,
+        commissionable: commissionableMRR(a.productBreakdown),
         action: "Introduce new AI Content Writer templates for their vertical",
         product: "AI Content Writer",
         urgency: "low",
@@ -99,6 +109,8 @@ function parseBriefToActions(brief: string, accounts: import("@/data/mock").Acco
     targets.forEach(a => {
       actions.push({
         account: a.name,
+        accountId: a.id,
+        commissionable: commissionableMRR(a.productBreakdown),
         action: "Show new CRM pipeline view with AI close probability scores",
         product: "CRM Pro",
         urgency: "low",
@@ -107,12 +119,14 @@ function parseBriefToActions(brief: string, accounts: import("@/data/mock").Acco
     });
   }
 
-  return actions.slice(0, 8);
+  // Rank by commissionable book value — biggest commission impact first.
+  return actions.sort((a, b) => b.commissionable - a.commissionable).slice(0, 8);
 }
 
 const urgencyColors = { high: "danger", medium: "warning", low: "info" } as const;
 
 export default function WeeklyBrief() {
+  const navigate = useNavigate();
   const { accounts } = useAM();
   const [brief, setBrief] = useState(SAMPLE_BRIEF);
   const [actions, setActions] = useState<ActionItem[] | null>(null);
@@ -197,6 +211,7 @@ export default function WeeklyBrief() {
                 {actions.length} Account-Aligned Actions Extracted
               </h2>
               <Badge variant="default">{actions.filter(a => a.urgency === "high").length} urgent</Badge>
+              <span className="text-xs text-muted-foreground">ranked by commissionable book value · AI products add at 95% inclusion</span>
             </div>
 
             {/* Highlight: Double Commission */}
@@ -223,12 +238,13 @@ export default function WeeklyBrief() {
                           <p className="text-sm font-semibold text-foreground">{action.account}</p>
                           <Badge variant={urgencyColors[action.urgency]}>{action.urgency === "high" ? "Act Now" : action.urgency === "medium" ? "This Week" : "FYI"}</Badge>
                           <span className="text-xs px-1.5 py-0.5 rounded bg-v-blue/10 text-v-blue font-medium">{action.product}</span>
+                          <span className="text-xs font-medium text-v-teal">{formatCurrency(action.commissionable)}/mo commissionable</span>
                         </div>
                         <p className="text-sm text-foreground">{action.action}</p>
                         <p className="text-xs text-muted-foreground mt-1">{action.rationale}</p>
                       </div>
-                      <Button size="sm" variant="outline">
-                        <ArrowRight className="w-3.5 h-3.5" />
+                      <Button size="sm" variant="outline" onClick={() => navigate(`/outreach?account=${action.accountId}`)}>
+                        Outreach <ArrowRight className="w-3.5 h-3.5" />
                       </Button>
                     </div>
                   </CardContent>

@@ -4,9 +4,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AI_ADOPTION_DATA } from "@/data/mock";
+import type { Account } from "@/data/mock";
 import { useNavigate } from "react-router-dom";
 import { useAM } from "@/context/AMContext";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, commissionableMRR } from "@/lib/utils";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, PieChart, Pie, Cell
@@ -24,6 +25,17 @@ export default function AIAdoption() {
   const withAI = accounts.filter(a => a.aiAdoption !== "none");
   const noAI = accounts.filter(a => a.aiAdoption === "none");
   const adoptionRate = accounts.length > 0 ? Math.round((withAI.length / accounts.length) * 100) : 0;
+
+  // AI product dollars: billings + commissionable for the account's active AI products only.
+  // AI products are Category 1 in the commission plan — 95% inclusion, the highest tier.
+  function aiDollars(a: Account) {
+    const ai = a.productBreakdown.filter(p => p.mrr > 0 && a.products.includes(p.name));
+    return {
+      billings: ai.reduce((s, p) => s + p.mrr, 0),
+      commissionable: ai.reduce((s, p) => s + p.commissionable, 0),
+    };
+  }
+  const totalAIComm = withAI.reduce((s, a) => s + aiDollars(a).commissionable, 0);
 
   // Total AI products in use
   const allProducts = withAI.flatMap(a => a.products);
@@ -44,7 +56,7 @@ export default function AIAdoption() {
     <div className="animate-fade-in">
       <Header
         title="AI Adoption"
-        subtitle={`${withAI.length} of ${accounts.length} partners have active AI products · ${adoptionRate}% penetration`}
+        subtitle={`${withAI.length} of ${accounts.length} partners have active AI products · ${adoptionRate}% penetration · ${formatCurrency(totalAIComm)}/mo commissionable from AI`}
       />
 
       <div className="p-6 space-y-6">
@@ -53,8 +65,8 @@ export default function AIAdoption() {
           {[
             { key: "ai" as const, label: "Partners with AI", value: withAI.length, sub: `${adoptionRate}% of book`, color: "text-v-blue", ring: "ring-v-blue/30" },
             { key: "noai" as const, label: "No Active AI", value: noAI.filter(a => a.mrr > 0).length, sub: "expansion targets", color: "text-foreground", ring: "ring-border" },
-            { key: "all" as const, label: "Unique AI Products", value: Object.keys(productFreq).length, sub: "in active use", color: "text-v-purple", ring: "ring-v-purple/30" },
-            { key: "multi" as const, label: "Multi-product", value: withAI.filter(a => a.products.length > 1).length, sub: "partners with 2+ AI", color: "text-v-teal", ring: "ring-v-teal/30" },
+            { key: "all" as const, label: "AI Commissionable $", value: formatCurrency(totalAIComm), sub: "95% inclusion · Category 1", color: "text-v-teal", ring: "ring-v-teal/30" },
+            { key: "multi" as const, label: "Multi-product", value: withAI.filter(a => a.products.length > 1).length, sub: "partners with 2+ AI", color: "text-v-purple", ring: "ring-v-purple/30" },
           ].map(card => (
             <button
               key={card.key}
@@ -161,13 +173,13 @@ export default function AIAdoption() {
               Partners with Active AI Products
             </CardTitle>
             <p className="text-xs text-muted-foreground mt-1">
-              {withAI.length} partners · BigQuery May 2026 actuals · sorted by product count
+              {withAI.length} partners · BigQuery May 2026 actuals · sorted by AI commissionable $
             </p>
           </CardHeader>
           <CardContent className="space-y-2">
             {withAI
               .filter(a => activeFilter === "multi" ? a.products.length > 1 : true)
-              .sort((a, b) => b.products.length - a.products.length)
+              .sort((a, b) => aiDollars(b).commissionable - aiDollars(a).commissionable)
               .map(account => (
                 <div
                   key={account.id}
@@ -178,6 +190,7 @@ export default function AIAdoption() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-sm font-medium text-foreground">{account.name}</span>
                       <span className="text-[10px] text-muted-foreground">{account.vertical}</span>
+                      <span className="text-[10px] font-semibold text-v-teal">{formatCurrency(aiDollars(account).commissionable)}/mo AI commissionable</span>
                     </div>
                     <div className="flex flex-wrap gap-1 mt-1.5">
                       {account.products.map(p => (
@@ -232,13 +245,13 @@ export default function AIAdoption() {
               Expansion Targets — No Active AI
             </CardTitle>
             <p className="text-xs text-muted-foreground mt-1">
-              {noAI.filter(a => a.mrr > 0).length} active partners with zero AI products · sorted by MRR
+              {noAI.filter(a => a.mrr > 0).length} active partners with zero AI products · sorted by commissionable $ · AI adds at 95% inclusion
             </p>
           </CardHeader>
           <CardContent className="space-y-2">
             {noAI
               .filter(a => a.mrr > 0)
-              .sort((a, b) => b.mrr - a.mrr)
+              .sort((a, b) => commissionableMRR(b.productBreakdown) - commissionableMRR(a.productBreakdown))
               .map(account => (
                 <div key={account.id} className="flex items-center justify-between gap-3 p-3 rounded-lg border border-border bg-secondary/20">
                   <div className="min-w-0 flex-1">
@@ -249,7 +262,9 @@ export default function AIAdoption() {
                         {account.health}
                       </Badge>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">{formatCurrency(account.mrr)}/mo · {account.contactName}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {formatCurrency(account.mrr)}/mo billings · <span className="text-v-teal font-medium">{formatCurrency(commissionableMRR(account.productBreakdown))}/mo commissionable</span> · {account.contactName}
+                    </p>
                   </div>
                   <Button size="sm" variant="outline" onClick={() => navigate(`/outreach?account=${account.id}`)}>
                     Outreach <ArrowRight className="w-3 h-3" />

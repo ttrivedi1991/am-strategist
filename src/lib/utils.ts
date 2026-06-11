@@ -29,3 +29,8 @@ export function pctChange(current: number, previous: number): number {
 export function getQoQBaseMRR(history: { week: string; mrr: number }[]): number {
   return history.find(h => h.week === "Jan 26")?.mrr ?? history[2]?.mrr ?? 0;
 }
+
+// Commissionable dollars/mo = billings × inclusion rate, summed across active products.
+export function commissionableMRR(breakdown: { mrr: number; commissionable: number }[]): number {
+  return breakdown.reduce((s, p) => s + (p.mrr > 0 ? p.commissionable : 0), 0);
+}
