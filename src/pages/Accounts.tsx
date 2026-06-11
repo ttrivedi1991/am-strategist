@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { type Account } from "@/data/mock";
-import { BILLING_DOCS } from "@/data/billingDocs";
+import { BILLING_DOCS, BILLING_DOCS_MTD } from "@/data/billingDocs";
 import { formatCurrency, daysSince, pctChange, getQoQBaseMRR, getLatestMRR } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { useAM } from "@/context/AMContext";
@@ -318,10 +318,10 @@ export default function Accounts() {
                       )}
 
                       {/* Invoices & credit notes — BigQuery f_billing_tx */}
-                      {account.agid && BILLING_DOCS[account.agid] && (() => {
-                        const docs = BILLING_DOCS[account.agid!];
-                        return (
-                          <div className="border-t border-border">
+                      {account.agid && [BILLING_DOCS[account.agid], BILLING_DOCS_MTD[account.agid]]
+                        .filter(Boolean)
+                        .map(docs => (
+                          <div key={docs.month} className="border-t border-border">
                             <div className="px-4 py-2 border-b border-border bg-secondary/50 flex items-center justify-between">
                               <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
                                 Invoices & Credit Notes — {docs.month}
@@ -360,8 +360,7 @@ export default function Accounts() {
                               </div>
                             ))}
                           </div>
-                        );
-                      })()}
+                        ))}
                     </div>
                     );
                   })()}

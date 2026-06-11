@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatCurrency, pctChange, getQoQBaseMRR, getLatestMRR, QOQ_BASELINE_LABEL } from "@/lib/utils";
+import { LIVE_META } from "@/data/liveMerge";
 import { useNavigate } from "react-router-dom";
 import { useAM } from "@/context/AMContext";
 import {
@@ -66,9 +67,9 @@ export default function Dashboard() {
     a => a.mrr > 0 && new Date(a.onboardedDate) < new Date("2026-04-01")
   );
 
-  function monthlyComm(partners: typeof accounts, histIdx: number) {
+  function monthlyComm(partners: typeof accounts, monthLabel: string) {
     return partners.reduce((s, acc) => {
-      const mrr = acc.revenueHistory[histIdx]?.mrr ?? 0;
+      const mrr = acc.revenueHistory.find(h => h.week === monthLabel)?.mrr ?? 0;
       const rate = commRate(acc);
       const onboarding = acc.productBreakdown
         .filter(p => p.category === "Onboarding")
@@ -77,9 +78,9 @@ export default function Dashboard() {
     }, 0);
   }
 
-  const marComm = monthlyComm(existingPartners, 4);
-  const aprComm = monthlyComm(existingPartners, 5);
-  const mayComm = monthlyComm(existingPartners, 6);
+  const marComm = monthlyComm(existingPartners, "Mar 26");
+  const aprComm = monthlyComm(existingPartners, "Apr 26");
+  const mayComm = monthlyComm(existingPartners, "May 26");
   const junCommEst = mayComm;
 
   const aprGrowth = aprComm - marComm;
@@ -102,6 +103,9 @@ export default function Dashboard() {
   const quotaPct = Math.round((selectedAM.achievedMRR / selectedAM.quota) * 100);
   const revenueChange = pctChange(totalMRR, totalMRRQoQBase);
 
+  // Current-month billings through last business day (from `npm run refresh`)
+  const mtdTotal = accounts.reduce((s, a) => s + (a.mtdBilling?.mrr ?? 0), 0);
+
   return (
     <div className="animate-fade-in">
       <Header
@@ -120,6 +124,7 @@ export default function Dashboard() {
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Source: f_billing_partner_snpm · {latestMonth} actuals vs {QOQ_BASELINE_LABEL} close (prior-quarter baseline per commission plan)
+                {mtdTotal > 0 && <> · <span className="font-medium text-foreground">{LIVE_META.mtdLabel} MTD: {formatCurrency(mtdTotal)}</span> through {LIVE_META.dataThrough}</>}
               </p>
             </div>
           </div>
@@ -132,6 +137,7 @@ export default function Dashboard() {
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Source: f_billing_partner_snpm · {latestMonth} actuals vs {QOQ_BASELINE_LABEL} close (prior-quarter baseline per commission plan)
+                {mtdTotal > 0 && <> · <span className="font-medium text-foreground">{LIVE_META.mtdLabel} MTD: {formatCurrency(mtdTotal)}</span> through {LIVE_META.dataThrough}</>}
               </p>
             </div>
           </div>

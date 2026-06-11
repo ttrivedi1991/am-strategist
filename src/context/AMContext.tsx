@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { ACCOUNTS, ORG_ALERTS, AM_ROSTER, type AMProfile, type Account, type OrgAlert } from "@/data/mock";
+import { withLiveBillings, withLiveTrend } from "@/data/liveMerge";
 
 interface AMContextValue {
   selectedAM: AMProfile;
@@ -47,14 +48,15 @@ export function AMProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem(AUTH_KEY);
   }
 
-  const accounts = ACCOUNTS.filter(a => (a.amId ?? "tanmay") === selectedAM.id);
+  const accounts = withLiveBillings(ACCOUNTS.filter(a => (a.amId ?? "tanmay") === selectedAM.id));
+  const liveAM = withLiveTrend(selectedAM, accounts);
   const orgAlerts = ORG_ALERTS.filter(a => {
     const account = accounts.find(acc => acc.id === a.accountId);
     return !!account;
   });
 
   return (
-    <AMContext.Provider value={{ selectedAM, setSelectedAM, accounts, orgAlerts, isAuthenticated, login, logout }}>
+    <AMContext.Provider value={{ selectedAM: liveAM, setSelectedAM, accounts, orgAlerts, isAuthenticated, login, logout }}>
       {children}
     </AMContext.Provider>
   );

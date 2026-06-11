@@ -44,6 +44,7 @@ export interface Account {
   onboardedDate: string;
   revenueHistory: { week: string; mrr: number }[];
   agid?: string; // Vendasta vmf_account_group_id from dim_current_partner
+  mtdBilling?: { week: string; mrr: number }; // current-month billings through last business day (set by liveMerge)
 }
 
 export interface AMProfile {
