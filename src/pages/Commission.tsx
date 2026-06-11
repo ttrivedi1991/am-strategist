@@ -52,8 +52,8 @@ export default function Commission() {
   const navigate = useNavigate();
   const { accounts } = useAM();
 
-  // Shared commission math (src/lib/commission.ts): Telkom Apr/May billing
-  // artifacts normalized, June projected at the current in-month pace.
+  // Shared commission math (src/lib/commission.ts): official raw billings,
+  // June projected from a credit-free May base at the current in-month pace.
   const outlook = computeQ2Outlook(accounts);
   const {
     marComm, aprComm, mayComm, junCommEst,
@@ -279,7 +279,7 @@ export default function Commission() {
                 <div>
                   <CardTitle>Commissionable Billings — Q2 2026</CardTitle>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Existing partners only · Onboarding excluded · Telkom Apr/May artifacts normalized · Jun projected at {(paceFactor * 100).toFixed(0)}% of May (in-month pace)
+                    Existing partners only · Onboarding excluded · official billings, credits included · Jun projected from credit-free May at {(paceFactor * 100).toFixed(0)}% pace
                   </p>
                 </div>
                 <Badge variant={wamgr >= 0.01 ? "success" : wamgr >= 0 ? "warning" : "danger"}>

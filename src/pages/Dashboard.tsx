@@ -40,7 +40,7 @@ export default function Dashboard() {
   // QoQ: compare current month to the prior-quarter close (Mar 2026 for Q2)
   const totalMRRQoQBase = accounts.reduce((s, a) => s + getQoQBaseMRR(a.revenueHistory), 0);
   const revenueChange = pctChange(totalMRR, totalMRRQoQBase);
-  // Same comparison with billing artifacts normalized (Telkom Apr/May)
+  // Context view: same comparison excluding the one-time Telkom credit (official numbers keep it)
   const latestAdj = accounts.reduce((s, a) => s + billingAdjustment(a.name, latestMonth), 0);
   const baseAdj = accounts.reduce((s, a) => s + billingAdjustment(a.name, "Mar 26"), 0);
   const adjRevenueChange = pctChange(totalMRR + latestAdj, totalMRRQoQBase + baseAdj);
@@ -82,7 +82,7 @@ export default function Dashboard() {
                 Book billings are down {Math.abs(revenueChange).toFixed(1)}% QoQ — {formatCurrency(totalMRR)} vs {formatCurrency(totalMRRQoQBase)} at {QOQ_BASELINE_LABEL} close
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Source: f_billing_partner_snpm · {latestMonthLabel} actuals vs {QOQ_BASELINE_LABEL} close (prior-quarter baseline per commission plan) · normalized for Telkom billing artifacts: {adjRevenueChange >= 0 ? "+" : ""}{adjRevenueChange.toFixed(1)}% QoQ
+                Source: f_billing_partner_snpm · {latestMonthLabel} actuals vs {QOQ_BASELINE_LABEL} close (prior-quarter baseline per commission plan) · excluding the one-time Telkom credit: {adjRevenueChange >= 0 ? "+" : ""}{adjRevenueChange.toFixed(1)}% QoQ
                 {mtdTotal > 0 && <> · <span className="font-medium text-foreground">{formatMonthLabel(LIVE_META.mtdLabel)} month-to-date: {formatCurrency(mtdTotal)}</span> through {LIVE_META.dataThrough} · pacing {pacePct >= 0 ? "+" : ""}{pacePct.toFixed(1)}% vs same span of {formatMonthLabel(LIVE_META.mtdPace.priorMonthLabel)}</>}
               </p>
             </div>
@@ -95,7 +95,7 @@ export default function Dashboard() {
                 Book billings are up {revenueChange.toFixed(1)}% QoQ — {formatCurrency(totalMRR)} vs {formatCurrency(totalMRRQoQBase)} at {QOQ_BASELINE_LABEL} close
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Source: f_billing_partner_snpm · {latestMonthLabel} actuals vs {QOQ_BASELINE_LABEL} close (prior-quarter baseline per commission plan) · normalized for Telkom billing artifacts: {adjRevenueChange >= 0 ? "+" : ""}{adjRevenueChange.toFixed(1)}% QoQ
+                Source: f_billing_partner_snpm · {latestMonthLabel} actuals vs {QOQ_BASELINE_LABEL} close (prior-quarter baseline per commission plan) · excluding the one-time Telkom credit: {adjRevenueChange >= 0 ? "+" : ""}{adjRevenueChange.toFixed(1)}% QoQ
                 {mtdTotal > 0 && <> · <span className="font-medium text-foreground">{formatMonthLabel(LIVE_META.mtdLabel)} month-to-date: {formatCurrency(mtdTotal)}</span> through {LIVE_META.dataThrough} · pacing {pacePct >= 0 ? "+" : ""}{pacePct.toFixed(1)}% vs same span of {formatMonthLabel(LIVE_META.mtdPace.priorMonthLabel)}</>}
               </p>
             </div>
@@ -202,7 +202,7 @@ export default function Dashboard() {
           <Card>
             <CardHeader>
               <CardTitle>Q2 Commission Outlook</CardTitle>
-              <p className="text-xs text-muted-foreground">Per Jan 2026 plan · Jun projected at pace ({(paceFactor * 100).toFixed(0)}% of May) · Telkom artifacts normalized</p>
+              <p className="text-xs text-muted-foreground">Per Jan 2026 plan · official billings (credits included) · Jun projected from credit-free May at {(paceFactor * 100).toFixed(0)}% pace</p>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex flex-col items-center py-2">
@@ -245,6 +245,9 @@ export default function Dashboard() {
                   <span className="text-muted-foreground">Retention bonus (est. at Q1's {Q1_RETENTION.toFixed(1)}%)</span>
                   <span className="font-medium">{formatCurrency(outlook.retentionBonusCAD)}</span>
                 </div>
+                <p className="text-[10px] text-muted-foreground pt-1 border-t border-border">
+                  To-date WAMGR carries May's −$20K Telkom credit (reverses April's overcharge). Quarterly growth telescopes to Jun − Mar close, so the wash cancels out by quarter end.
+                </p>
               </div>
               <Button variant="outline" size="sm" className="w-full" onClick={() => navigate("/commission")}>
                 Full Commission Breakdown <ArrowRight className="w-3.5 h-3.5" />

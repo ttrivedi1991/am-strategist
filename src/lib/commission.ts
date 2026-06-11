@@ -50,9 +50,13 @@ export function retentionBonus(pct: number): number {
   return payout;
 }
 
-// Billing artifacts normalized for commission math — finance applies an
-// Adjustment column for exactly this in the rep-wise commission sheet.
-// Confirmed with Tanmay, Jun 2026.
+// One-time billing artifacts. NOT applied to official monthly numbers — those
+// stay raw, matching the HOS dashboard and finance's pipeline (credits count in
+// the month they land; any payout adjustment is finance's discretion). Because
+// Net Quarterly Growth telescopes to (Jun close − Mar close), the Apr overcharge
+// and May credit cancel out of Q2 WAMGR by quarter close on their own. The only
+// place the artifact genuinely distorts is a projection anchored on the affected
+// month — so these are used solely to build a clean base for the June estimate.
 export const BILLING_ADJUSTMENTS: { account: string; week: string; amount: number; reason: string }[] = [
   { account: "Telkom SA Soc Ltd.", week: "Apr 26", amount: -20000, reason: "April subscription overcharge, credited back in May (CM35034)" },
   { account: "Telkom SA Soc Ltd.", week: "May 26", amount: 20000, reason: "May credit offsetting the April overcharge" },
@@ -87,9 +91,17 @@ export function q2EligiblePartners(accounts: Account[]): Account[] {
   return accounts.filter(a => a.mrr > 0 && new Date(a.onboardedDate) < new Date("2026-04-01"));
 }
 
-// Commissionable dollars for one month: adjusted billings × blended rate,
-// excluding Onboarding (per plan).
+// Commissionable dollars for one month: raw (official) billings × blended rate,
+// excluding Onboarding (per plan). Matches the warehouse — credits included.
 export function monthlyCommissionable(accounts: Account[], week: string): number {
+  return accounts.reduce(
+    (s, a) => s + (a.revenueHistory.find(h => h.week === week)?.mrr ?? 0) * blendedRate(a) - onboardingComm(a),
+    0
+  );
+}
+
+// Same, with one-time credits reversed — used ONLY as the June projection anchor.
+function monthlyCommissionableCreditFree(accounts: Account[], week: string): number {
   return accounts.reduce(
     (s, a) => s + adjustedBilling(a, week) * blendedRate(a) - onboardingComm(a),
     0
@@ -128,7 +140,10 @@ export function computeQ2Outlook(accounts: Account[]): Q2Outlook {
   const aprComm = monthlyCommissionable(eligible, "Apr 26");
   const mayComm = monthlyCommissionable(eligible, "May 26");
   const paceFactor = mtdPaceFactor();
-  const junCommEst = mayComm * paceFactor;
+  // June anchored on May with the one-time Telkom credit reversed — projecting
+  // from the credit-depressed raw May would understate June (the HOS dashboard
+  // projects June above May for the same reason).
+  const junCommEst = monthlyCommissionableCreditFree(eligible, "May 26") * paceFactor;
 
   const wamgrToDate = marComm + aprComm > 0 ? (mayComm - marComm) / (marComm + aprComm) : 0;
   const projBase = marComm + aprComm + mayComm;
