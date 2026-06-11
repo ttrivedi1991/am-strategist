@@ -9,7 +9,7 @@ import {
 
 const NAV = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
-  { to: "/accounts", icon: Users, label: "Book of Business" },
+  { to: "/accounts", icon: Users, label: "Accounts" },
   { to: "/commission", icon: TrendingUp, label: "Commission" },
   { to: "/ai-adoption", icon: BrainCircuit, label: "AI Adoption" },
   { to: "/intel", icon: Bell, label: "Org Intelligence" },

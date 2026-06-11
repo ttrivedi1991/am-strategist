@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { type Account } from "@/data/mock";
+import { BILLING_DOCS } from "@/data/billingDocs";
 import { formatCurrency, daysSince, pctChange, getQoQBaseMRR, getLatestMRR } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { useAM } from "@/context/AMContext";
@@ -64,7 +65,7 @@ export default function Accounts() {
   return (
     <div className="animate-fade-in">
       <Header
-        title="Book of Business"
+        title="Accounts"
         subtitle={`${activeAccounts.length} active partners · ${formatCurrency(totalMRR)} billings · ${formatCurrency(totalCommissionable)} commissionable`}
       />
 
@@ -315,6 +316,52 @@ export default function Accounts() {
                           <span className="text-v-amber font-semibold">{formatCurrency(gap)} ({Math.round(gapPct * 100)}%)</span>
                         </div>
                       )}
+
+                      {/* Invoices & credit notes — BigQuery f_billing_tx */}
+                      {account.agid && BILLING_DOCS[account.agid] && (() => {
+                        const docs = BILLING_DOCS[account.agid!];
+                        return (
+                          <div className="border-t border-border">
+                            <div className="px-4 py-2 border-b border-border bg-secondary/50 flex items-center justify-between">
+                              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                                Invoices & Credit Notes — {docs.month}
+                              </p>
+                              <span className="text-[10px] text-muted-foreground">BigQuery · f_billing_tx</span>
+                            </div>
+                            <div className="px-4 py-2 flex items-center gap-4 text-xs">
+                              <span className="text-muted-foreground">{docs.invoiceCount} invoice{docs.invoiceCount !== 1 ? "s" : ""}</span>
+                              <span className="font-semibold">{formatCurrency(docs.billed)} billed</span>
+                              {docs.credits < 0 && (
+                                <span className="font-semibold text-v-red">−{formatCurrency(Math.abs(docs.credits))} in credits</span>
+                              )}
+                            </div>
+                            {docs.topInvoices.length > 0 && (
+                              <div className="divide-y divide-border border-t border-border">
+                                {docs.topInvoices.map(inv => (
+                                  <div key={inv.id} className="flex items-center px-4 py-1.5 text-xs">
+                                    <span className="flex-1 font-mono text-[10px] text-muted-foreground truncate">{inv.id}</span>
+                                    <span className="w-24 text-[10px] text-muted-foreground">{inv.date}</span>
+                                    <span className="w-20 text-[10px] text-muted-foreground text-right">{inv.lineCount} line{inv.lineCount !== 1 ? "s" : ""}</span>
+                                    <span className="w-24 text-right font-semibold">{formatCurrency(inv.amount)}</span>
+                                  </div>
+                                ))}
+                                {docs.invoiceCount > docs.topInvoices.length && (
+                                  <div className="px-4 py-1.5 text-[10px] text-muted-foreground">
+                                    + {docs.invoiceCount - docs.topInvoices.length} smaller invoices
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            {docs.creditNotes.map(cn => (
+                              <div key={cn.id} className="flex items-center px-4 py-2 text-xs border-t border-v-red/30 bg-v-red/5">
+                                <span className="flex-1 font-medium text-v-red">Credit note <span className="font-mono text-[10px]">{cn.id}</span></span>
+                                <span className="w-24 text-[10px] text-muted-foreground">{cn.date}</span>
+                                <span className="w-24 text-right font-semibold text-v-red">−{formatCurrency(Math.abs(cn.amount))}</span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
                     </div>
                     );
                   })()}
