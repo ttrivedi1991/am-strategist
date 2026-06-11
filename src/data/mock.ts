@@ -201,7 +201,7 @@ export const ACCOUNTS: Account[] = [
     products: ["Reputation AI Pro", "Conversations AI Pro", "Conversations AI Standard", "Conversations AI Premium"],
     productBreakdown: [{ name: "Custom Plan Subscription", category: "Vendasta Platform", mrr: 55326.0, commissionable: 52559.7 }, { name: "Reputation AI Pro", category: "Reputation AI", mrr: 3568.0, commissionable: 3389.6 }, { name: "WordPress Hosting Pro", category: "Website", mrr: 966.0, commissionable: 917.7 }, { name: "Website Support", category: "Website Support", mrr: 960.0, commissionable: 480.0 }, { name: "Conversations AI Pro", category: "Webchat", mrr: 663.0, commissionable: 629.85 }, { name: "Conversations AI Standard", category: "Webchat", mrr: 348.0, commissionable: 330.6 }, { name: "Advanced Reporting", category: "Analytics", mrr: 216.0, commissionable: 205.2 }, { name: "Conversations AI Premium", category: "Webchat", mrr: 79.0, commissionable: 75.05 }, { name: "WordPress Hosting Premium", category: "Website", mrr: 65.0, commissionable: 61.75 }, { name: "Social Marketing Pro", category: "Social", mrr: 64.0, commissionable: 60.8 }, { name: "Customer Voice Pro", category: "Reviews", mrr: 40.0, commissionable: 38.0 }],
     website: "telkom.co.za",
-    notes: "Spiked to $82.1K in April (from $62.3K base), then dropped to $42.2K in May — likely a billing true-up or one-time adjustment. Investigate with data team before treating April as new run rate. Major ISV partner in South Africa. Lunga is the primary contact.",
+    notes: "April ($82.1K) included a ~$20K subscription overcharge; a $20K credit plus offsetting adjustment was issued in May ($42.2K). Both months are billing artifacts — the true run rate is ~$62K/mo (confirmed Jun 2026). Major ISV partner in South Africa. Lunga is the primary contact.",
     isMIA: false,
     onboardedDate: "2021-06-01",
     revenueHistory: [
@@ -227,9 +227,11 @@ export const ACCOUNTS: Account[] = [
     lastActivity: "2026-02-21",
     isMIA: true,
     products: [],
-    productBreakdown: [{ name: "Enterprise 2026", category: "Vendasta Platform", mrr: 41400.0, commissionable: 39330.0 }, { name: "Social Marketing Pro", category: "Social", mrr: 22740.56, commissionable: 21603.53 }],
+    // Social Marketing Pro usage (~$22.7K value) is bundled inside the flat $41.4K contractual
+    // subscription — billed $0 unless usage exceeds the sub, so it carries no commissionable value.
+    productBreakdown: [{ name: "Enterprise 2026", category: "Vendasta Platform", mrr: 41400.0, commissionable: 39330.0 }, { name: "Social Marketing Pro", category: "Social", mrr: 0.0, commissionable: 0.0 }],
     website: "uwm.com",
-    notes: "Joined Feb 2026 at $41.4K/mo (Enterprise 2026 plan). Billing has been flat at $41.4K every month since. No AI products yet. Sarah DeCiantis (sdeciantis@uwm.com) — book a call to confirm the contract structure and pitch AI expansion.",
+    notes: "Joined Feb 2026 on a contractual commitment of $41.4K/mo (Enterprise 2026 plan) — billed flat unless product usage exceeds the subscription (new Vendasta plan structure; usage discounts against the sub). Social Marketing Pro usage (~$22.7K value) is bundled, not billed. Expansion math: usage must clear the $41.4K bar before new dollars bill. Sarah DeCiantis (sdeciantis@uwm.com).",
     onboardedDate: "2026-02-01",
     revenueHistory: [
       { week: "Nov 25", mrr: 0 }, { week: "Dec 25", mrr: 0 }, { week: "Jan 26", mrr: 0 }, { week: "Feb 26", mrr: 41423 }, { week: "Mar 26", mrr: 41400 }, { week: "Apr 26", mrr: 41400 }, { week: "May 26", mrr: 41400 },
@@ -720,14 +722,14 @@ export const ACCOUNTS: Account[] = [
     mrr: 1074,
     mrrPrev: 1080,
     arr: 12888,
-    health: "healthy",
+    health: "at-risk",
     aiAdoption: "none",
     lastMeeting: "2026-04-12",
     lastActivity: "2026-04-13",
     products: [],
     productBreakdown: [{ name: "Premium 2024", category: "Vendasta Platform", mrr: 999.0, commissionable: 949.05 }, { name: "Local SEO Pro", category: "SEO", mrr: 46.0, commissionable: 43.7 }],
     website: "cylex.com",
-    notes: "Declined to $23 in May — nearly churned. Was $1.1K/mo Jan–Apr. Stefan communicates primarily via email. Urgent check-in needed.",
+    notes: "Downgraded their subscription in May — confirmed downgrade, not a billing error. Revenue dropped from ~$1.1K/mo to $23/mo. Stefan communicates primarily via email. Win-back conversation is the play, not a billing investigation.",
     isMIA: false,
     onboardedDate: "2023-01-15",
     revenueHistory: [
