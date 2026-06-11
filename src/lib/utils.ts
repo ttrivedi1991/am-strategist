@@ -43,3 +43,8 @@ export function getLatestMRR(history: { week: string; mrr: number }[]): number {
 export function commissionableMRR(breakdown: { mrr: number; commissionable: number }[]): number {
   return breakdown.reduce((s, p) => s + (p.mrr > 0 ? p.commissionable : 0), 0);
 }
+
+// "May 26" (data month key) → "May 2026" for display, so it never reads as a calendar date.
+export function formatMonthLabel(week: string): string {
+  return week.replace(/^([A-Za-z]{3}) (\d{2})$/, "$1 20$2");
+}

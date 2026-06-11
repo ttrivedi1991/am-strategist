@@ -1,5 +1,6 @@
 import { Bell, RefreshCw } from "lucide-react";
 import { ACCOUNTS, ORG_ALERTS } from "@/data/mock";
+import { LIVE_META } from "@/data/liveMerge";
 import { formatDate } from "@/lib/utils";
 
 interface HeaderProps {
@@ -24,7 +25,7 @@ export function Header({ title, subtitle }: HeaderProps) {
         </span>
         <span className="text-[10px] text-muted-foreground hidden sm:flex items-center gap-1 px-2 py-0.5 rounded-full border border-border bg-secondary">
           <span className="w-1.5 h-1.5 rounded-full bg-v-teal inline-block" />
-          Data: Apr 2026 · BigQuery
+          Data through {formatDate(`${LIVE_META.dataThrough}T12:00:00`)} · BigQuery
         </span>
 
         {(urgentAlerts > 0 || miaCount > 0) && (

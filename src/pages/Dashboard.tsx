@@ -3,7 +3,7 @@ import { StatCard } from "@/components/ui/stat-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { formatCurrency, pctChange, getQoQBaseMRR, getLatestMRR, QOQ_BASELINE_LABEL } from "@/lib/utils";
+import { formatCurrency, formatMonthLabel, pctChange, getQoQBaseMRR, getLatestMRR, QOQ_BASELINE_LABEL } from "@/lib/utils";
 import { LIVE_META } from "@/data/liveMerge";
 import { useNavigate } from "react-router-dom";
 import { useAM } from "@/context/AMContext";
@@ -29,13 +29,32 @@ const COMMISSION_TIERS = [
   { wamgr: 0.0500, rate: 0.0300, label: "5.00%" },
 ];
 
+// Negative growth pays 0% — only WAMGR >= 0.00% reaches the first tier (per Jan 2026 plan;
+// confirmed by the Q1-2026 statement: -0.12% growth → 0.00% rate → $0).
+const NEGATIVE_TIER = { wamgr: -1, rate: 0, label: "negative" };
+
 function getCommissionTier(wamgr: number) {
+  if (wamgr < 0) return NEGATIVE_TIER;
   let current = COMMISSION_TIERS[0];
   for (const tier of COMMISSION_TIERS) {
     if (wamgr >= tier.wamgr) current = tier;
     else break;
   }
   return current;
+}
+
+// Logo retention bonus (flat quarterly payout, CAD)
+const RETENTION_TIERS = [
+  { pct: 95, payout: 900 }, { pct: 96, payout: 1350 }, { pct: 97, payout: 1800 },
+  { pct: 98, payout: 2250 }, { pct: 99, payout: 2813 }, { pct: 100, payout: 3375 },
+];
+const Q1_RETENTION = 97.09; // from Q1-2026 commission statement
+const USD_TO_CAD = 1.38;    // FX on Q1-2026 statement
+
+function retentionBonus(pct: number): number {
+  let payout = 0;
+  for (const t of RETENTION_TIERS) if (pct >= t.pct) payout = t.payout;
+  return payout;
 }
 
 function getNextCommissionTier(wamgr: number) {
@@ -55,6 +74,7 @@ export default function Dashboard() {
   // Get latest month from revenueTrend (last entry)
   const latestTrend = selectedAM.revenueTrend[selectedAM.revenueTrend.length - 1];
   const latestMonth = latestTrend?.week ?? "May 26";
+  const latestMonthLabel = formatMonthLabel(latestMonth); // "May 2026", never date-like
 
   // Commission calculation (Q2 2026)
   function commRate(acc: typeof accounts[0]) {
@@ -100,8 +120,19 @@ export default function Dashboard() {
 
   // QoQ: compare current month to the prior-quarter close (Mar 2026 for Q2)
   const totalMRRQoQBase = accounts.reduce((s, a) => s + getQoQBaseMRR(a.revenueHistory), 0);
-  const quotaPct = Math.round((selectedAM.achievedMRR / selectedAM.quota) * 100);
   const revenueChange = pctChange(totalMRR, totalMRRQoQBase);
+
+  // Q2 commission outlook per the Jan 2026 plan: payout = tier rate × book under
+  // management (USD), converted to CAD; retention bonus estimated at Q1's rate
+  // until contract-level churn data exists.
+  const bookGrowthCommissionCAD = currentTier.rate * bookUnderManagement * USD_TO_CAD;
+  const retentionBonusCAD = retentionBonus(Q1_RETENTION);
+  const projectedCommissionCAD = bookGrowthCommissionCAD + retentionBonusCAD;
+  const tierProgressPct = wamgr < 0
+    ? 0
+    : nextTier
+      ? Math.min(100, Math.round(((wamgr - currentTier.wamgr) / (nextTier.wamgr - currentTier.wamgr)) * 100))
+      : 100;
 
   // Current-month billings through last business day (from `npm run refresh`)
   const mtdTotal = accounts.reduce((s, a) => s + (a.mtdBilling?.mrr ?? 0), 0);
@@ -123,8 +154,8 @@ export default function Dashboard() {
                 Book billings are down {Math.abs(revenueChange).toFixed(1)}% QoQ — {formatCurrency(totalMRR)} vs {formatCurrency(totalMRRQoQBase)} at {QOQ_BASELINE_LABEL} close
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Source: f_billing_partner_snpm · {latestMonth} actuals vs {QOQ_BASELINE_LABEL} close (prior-quarter baseline per commission plan)
-                {mtdTotal > 0 && <> · <span className="font-medium text-foreground">{LIVE_META.mtdLabel} MTD: {formatCurrency(mtdTotal)}</span> through {LIVE_META.dataThrough}</>}
+                Source: f_billing_partner_snpm · {latestMonthLabel} actuals vs {QOQ_BASELINE_LABEL} close (prior-quarter baseline per commission plan)
+                {mtdTotal > 0 && <> · <span className="font-medium text-foreground">{formatMonthLabel(LIVE_META.mtdLabel)} month-to-date: {formatCurrency(mtdTotal)}</span> through {LIVE_META.dataThrough}</>}
               </p>
             </div>
           </div>
@@ -136,8 +167,8 @@ export default function Dashboard() {
                 Book billings are up {revenueChange.toFixed(1)}% QoQ — {formatCurrency(totalMRR)} vs {formatCurrency(totalMRRQoQBase)} at {QOQ_BASELINE_LABEL} close
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Source: f_billing_partner_snpm · {latestMonth} actuals vs {QOQ_BASELINE_LABEL} close (prior-quarter baseline per commission plan)
-                {mtdTotal > 0 && <> · <span className="font-medium text-foreground">{LIVE_META.mtdLabel} MTD: {formatCurrency(mtdTotal)}</span> through {LIVE_META.dataThrough}</>}
+                Source: f_billing_partner_snpm · {latestMonthLabel} actuals vs {QOQ_BASELINE_LABEL} close (prior-quarter baseline per commission plan)
+                {mtdTotal > 0 && <> · <span className="font-medium text-foreground">{formatMonthLabel(LIVE_META.mtdLabel)} month-to-date: {formatCurrency(mtdTotal)}</span> through {LIVE_META.dataThrough}</>}
               </p>
             </div>
           </div>
@@ -148,14 +179,14 @@ export default function Dashboard() {
           <StatCard
             label="WAMGR (Current)"
             value={`${(wamgr * 100).toFixed(2)}%`}
-            changeLabel={`At ${currentTier.label} tier → ${(currentTier.rate * 100).toFixed(2)}% of book`}
+            changeLabel={wamgr < 0 ? "Negative growth → 0% payout (retention bonus still pays)" : `At ${currentTier.label} tier → ${(currentTier.rate * 100).toFixed(2)}% of book`}
             icon={TrendingUp}
             iconColor={wamgr >= 0.01 ? "text-v-green" : wamgr >= 0 ? "text-v-amber" : "text-v-red"}
             trend={wamgr >= 0.01 ? "up" : "down"}
             onClick={() => navigate("/commission")}
           />
           <StatCard
-            label={`Total Billings (${latestMonth})`}
+            label={`Total Billings (${latestMonthLabel})`}
             value={formatCurrency(totalMRR)}
             change={revenueChange}
             changeLabel={`vs ${QOQ_BASELINE_LABEL} close (QoQ)`}
@@ -164,7 +195,7 @@ export default function Dashboard() {
             onClick={() => navigate("/accounts")}
           />
           <StatCard
-            label={`Commissionable $ (${latestMonth})`}
+            label={`Commissionable $ (${latestMonthLabel})`}
             value={formatCurrency(mayComm)}
             changeLabel={`Q2 book under management: ${formatCurrency(bookUnderManagement)}`}
             icon={DollarSign}
@@ -192,7 +223,7 @@ export default function Dashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle>Book Billings Trend</CardTitle>
-                  <p className="text-xs text-muted-foreground mt-1">Recurring Billings · Channel partners · Nov 2025–{latestMonth} · f_billing_partner_snpm</p>
+                  <p className="text-xs text-muted-foreground mt-1">Recurring Billings · Channel partners · Nov 2025–{latestMonthLabel} · f_billing_partner_snpm</p>
                 </div>
                 <Badge variant={revenueChange >= 0 ? "success" : "danger"}>
                   {revenueChange > 0 ? "+" : ""}{revenueChange}% QoQ
@@ -209,7 +240,7 @@ export default function Dashboard() {
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="week" tick={{ fontSize: 10, fill: "#9ca3af" }} tickLine={false} axisLine={false} />
+                  <XAxis dataKey="week" tickFormatter={(w: string) => w.replace(/ (\d{2})$/, " '$1")} tick={{ fontSize: 10, fill: "#9ca3af" }} tickLine={false} axisLine={false} />
                   <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} tickLine={false} axisLine={false} tickFormatter={v => `$${(v / 1000).toFixed(0)}K`} />
                   <Tooltip
                     formatter={(v: any) => [formatCurrency(v as number), "Billings"]}
@@ -221,11 +252,11 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          {/* Quota Gauge */}
+          {/* Q2 Commission Outlook — per the Jan 2026 commission plan */}
           <Card>
             <CardHeader>
-              <CardTitle>Quota Progress</CardTitle>
-              <p className="text-xs text-muted-foreground">{latestMonth}</p>
+              <CardTitle>Q2 Commission Outlook</CardTitle>
+              <p className="text-xs text-muted-foreground">Per Jan 2026 plan · Apr–Jun (Jun est. flat at May)</p>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex flex-col items-center py-2">
@@ -235,34 +266,38 @@ export default function Dashboard() {
                     <path
                       d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                       fill="none"
-                      stroke={quotaPct >= 100 ? "#00B67A" : "#F59E0B"}
+                      stroke={wamgr >= 0 ? "#00B67A" : "#EF4444"}
                       strokeWidth="3"
-                      strokeDasharray={`${quotaPct}, 100`}
+                      strokeDasharray={`${Math.max(tierProgressPct, 2)}, 100`}
                       strokeLinecap="round"
                     />
                   </svg>
                   <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <span className="text-2xl font-bold text-foreground">{quotaPct}%</span>
-                    <span className="text-[10px] text-muted-foreground">attained</span>
+                    <span className="text-xl font-bold text-foreground">{formatCurrency(projectedCommissionCAD)}</span>
+                    <span className="text-[10px] text-muted-foreground">projected (CAD)</span>
                   </div>
                 </div>
               </div>
               <div className="space-y-2">
                 <div className="flex justify-between text-xs">
-                  <span className="text-muted-foreground">Achieved MRR</span>
-                  <span className="font-medium">{formatCurrency(selectedAM.achievedMRR)}</span>
+                  <span className="text-muted-foreground">WAMGR (Q2 to date)</span>
+                  <span className={`font-medium ${wamgr < 0 ? "text-v-red" : "text-v-green"}`}>{(wamgr * 100).toFixed(2)}%</span>
                 </div>
                 <div className="flex justify-between text-xs">
-                  <span className="text-muted-foreground">Monthly Quota</span>
-                  <span className="font-medium">{formatCurrency(selectedAM.quota)}</span>
+                  <span className="text-muted-foreground">Eligible rate</span>
+                  <span className="font-medium">{(currentTier.rate * 100).toFixed(2)}%{wamgr < 0 && " (negative growth)"}</span>
                 </div>
                 <div className="flex justify-between text-xs">
-                  <span className="text-muted-foreground">Gap to Close</span>
-                  <span className="font-medium text-v-amber">{formatCurrency(selectedAM.quota - selectedAM.achievedMRR)}</span>
+                  <span className="text-muted-foreground">Book growth commission</span>
+                  <span className="font-medium">{formatCurrency(bookGrowthCommissionCAD)}</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted-foreground">Retention bonus (est. at Q1's {Q1_RETENTION.toFixed(1)}%)</span>
+                  <span className="font-medium">{formatCurrency(retentionBonusCAD)}</span>
                 </div>
               </div>
-              <Button variant="outline" size="sm" className="w-full" onClick={() => navigate("/outreach")}>
-                Build Outreach Plan <ArrowRight className="w-3.5 h-3.5" />
+              <Button variant="outline" size="sm" className="w-full" onClick={() => navigate("/commission")}>
+                Full Commission Breakdown <ArrowRight className="w-3.5 h-3.5" />
               </Button>
             </CardContent>
           </Card>
