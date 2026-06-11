@@ -137,6 +137,30 @@ function buildDocs(rows, monthIso, throughDate) {
   return docs;
 }
 
+// ── 2b. In-month pacing: current MTD vs same day-span of the prior month ────
+// Both sides from f_billing_tx (credits excluded) so the ratio is internally
+// consistent — billing is front-loaded in the month, so comparing to the same
+// span is the only honest pace measure.
+const spanDay = Number(iso(yesterday).slice(8, 10));
+const priorSpanEnd = `${lastFullMonthStart.slice(0, 8)}${String(spanDay).padStart(2, "0")}`;
+console.log(`Pulling pacing (day 1–${spanDay} of current vs prior month)…`);
+const paceRows = bq(`
+  SELECT
+    ROUND(SUM(IF(d.date >= '${currentMonthStart}', tx.billing_transaction, 0)), 2) AS current_span,
+    ROUND(SUM(IF(d.date < '${currentMonthStart}', tx.billing_transaction, 0)), 2) AS prior_span
+  FROM \`${PROJECT}.management.f_billing_tx\` tx
+  JOIN \`${PROJECT}.management.dim_date\` d ON tx.transaction_date_sk = d.date_sk
+  JOIN \`${PROJECT}.management.dim_current_user\` u ON tx.assigned_sales_person_snk = u.user_snk
+  WHERE u.work_email = '${AM_EMAIL}' AND tx.line_item_sub_type != 'Credit'
+    AND (d.date BETWEEN '${currentMonthStart}' AND '${iso(yesterday)}'
+      OR d.date BETWEEN '${lastFullMonthStart}' AND '${priorSpanEnd}')`);
+const pace = {
+  spanDays: spanDay,
+  current: Number(paceRows[0]?.current_span ?? 0),
+  priorSameSpan: Number(paceRows[0]?.prior_span ?? 0),
+  priorMonthLabel: monthLabel(lastFullMonthStart),
+};
+
 const lastFullMonthEnd = iso(new Date(today.getFullYear(), today.getMonth(), 0));
 console.log("Pulling invoices + credit notes (last full month)…");
 const docsLastMonth = buildDocs(invoicePull(lastFullMonthStart, lastFullMonthEnd), lastFullMonthStart, null);
@@ -162,6 +186,9 @@ export const LIVE_META = {
   generatedAt: "${iso(today)}",
   dataThrough: "${iso(yesterday)}",
   mtdLabel: "${monthLabel(currentMonthStart)}",
+  // In-month pace: invoiced dollars (credits excluded) for the first spanDays
+  // of the current month vs the same span of the prior month (f_billing_tx).
+  mtdPace: { spanDays: ${pace.spanDays}, current: ${pace.current}, priorSameSpan: ${pace.priorSameSpan}, priorMonthLabel: "${pace.priorMonthLabel}" },
 };
 
 export const LIVE_BILLINGS: Record<string, LivePartnerBilling> = {

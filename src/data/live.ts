@@ -9,6 +9,9 @@ export const LIVE_META = {
   generatedAt: "2026-06-11",
   dataThrough: "2026-06-10",
   mtdLabel: "Jun 26",
+  // In-month pace: invoiced dollars (credits excluded) for day 1–${spanDays}
+  // of the current month vs the same span of the prior month (f_billing_tx).
+  mtdPace: { spanDays: 10, current: 71035.85, priorSameSpan: 72906.31, priorMonthLabel: "May 26" },
 };
 
 export const LIVE_BILLINGS: Record<string, LivePartnerBilling> = {

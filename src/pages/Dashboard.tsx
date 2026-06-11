@@ -4,7 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatCurrency, formatMonthLabel, pctChange, getQoQBaseMRR, getLatestMRR, QOQ_BASELINE_LABEL } from "@/lib/utils";
+import { computeQ2Outlook, mtdCommissionable, monthlyCommissionable, billingAdjustment, Q1_RETENTION } from "@/lib/commission";
 import { LIVE_META } from "@/data/liveMerge";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAM } from "@/context/AMContext";
 import {
@@ -18,52 +20,6 @@ import {
 const priorityColor = { high: "danger", medium: "warning", low: "info" } as const;
 const priorityLabel = { high: "Urgent", medium: "This Week", low: "FYI" } as const;
 
-// Commission tier structure (from Jan 2026 plan)
-const COMMISSION_TIERS = [
-  { wamgr: 0.0000, rate: 0.0060, label: "0.00%" },
-  { wamgr: 0.0025, rate: 0.0090, label: "0.25%" },
-  { wamgr: 0.0050, rate: 0.0120, label: "0.50%" },
-  { wamgr: 0.0100, rate: 0.0150, label: "1.00%" },
-  { wamgr: 0.0200, rate: 0.0188, label: "2.00%" },
-  { wamgr: 0.0300, rate: 0.0225, label: "3.00%" },
-  { wamgr: 0.0500, rate: 0.0300, label: "5.00%" },
-];
-
-// Negative growth pays 0% — only WAMGR >= 0.00% reaches the first tier (per Jan 2026 plan;
-// confirmed by the Q1-2026 statement: -0.12% growth → 0.00% rate → $0).
-const NEGATIVE_TIER = { wamgr: -1, rate: 0, label: "negative" };
-
-function getCommissionTier(wamgr: number) {
-  if (wamgr < 0) return NEGATIVE_TIER;
-  let current = COMMISSION_TIERS[0];
-  for (const tier of COMMISSION_TIERS) {
-    if (wamgr >= tier.wamgr) current = tier;
-    else break;
-  }
-  return current;
-}
-
-// Logo retention bonus (flat quarterly payout, CAD)
-const RETENTION_TIERS = [
-  { pct: 95, payout: 900 }, { pct: 96, payout: 1350 }, { pct: 97, payout: 1800 },
-  { pct: 98, payout: 2250 }, { pct: 99, payout: 2813 }, { pct: 100, payout: 3375 },
-];
-const Q1_RETENTION = 97.09; // from Q1-2026 commission statement
-const USD_TO_CAD = 1.38;    // FX on Q1-2026 statement
-
-function retentionBonus(pct: number): number {
-  let payout = 0;
-  for (const t of RETENTION_TIERS) if (pct >= t.pct) payout = t.payout;
-  return payout;
-}
-
-function getNextCommissionTier(wamgr: number) {
-  for (let i = 0; i < COMMISSION_TIERS.length - 1; i++) {
-    if (wamgr < COMMISSION_TIERS[i + 1].wamgr) return COMMISSION_TIERS[i + 1];
-  }
-  return null;
-}
-
 export default function Dashboard() {
   const navigate = useNavigate();
   const { accounts, orgAlerts, selectedAM } = useAM();
@@ -76,66 +32,38 @@ export default function Dashboard() {
   const latestMonth = latestTrend?.week ?? "May 26";
   const latestMonthLabel = formatMonthLabel(latestMonth); // "May 2026", never date-like
 
-  // Commission calculation (Q2 2026)
-  function commRate(acc: typeof accounts[0]) {
-    const totalBilling = acc.productBreakdown.reduce((s, p) => s + (p.mrr > 0 ? p.mrr : 0), 0);
-    const totalComm = acc.productBreakdown.reduce((s, p) => s + (p.mrr > 0 ? p.commissionable : 0), 0);
-    return totalBilling > 0 ? totalComm / totalBilling : 0.95;
-  }
-
-  const existingPartners = accounts.filter(
-    a => a.mrr > 0 && new Date(a.onboardedDate) < new Date("2026-04-01")
-  );
-
-  function monthlyComm(partners: typeof accounts, monthLabel: string) {
-    return partners.reduce((s, acc) => {
-      const mrr = acc.revenueHistory.find(h => h.week === monthLabel)?.mrr ?? 0;
-      const rate = commRate(acc);
-      const onboarding = acc.productBreakdown
-        .filter(p => p.category === "Onboarding")
-        .reduce((s2, p) => s2 + p.commissionable, 0);
-      return s + mrr * rate - onboarding;
-    }, 0);
-  }
-
-  const marComm = monthlyComm(existingPartners, "Mar 26");
-  const aprComm = monthlyComm(existingPartners, "Apr 26");
-  const mayComm = monthlyComm(existingPartners, "May 26");
-  const junCommEst = mayComm;
-
-  const aprGrowth = aprComm - marComm;
-  const mayGrowth = mayComm - aprComm;
-  const partialNetGrowth = aprGrowth + mayGrowth;
-  const partialStartingBase = marComm + aprComm;
-  const wamgr = partialStartingBase > 0 ? partialNetGrowth / partialStartingBase : 0;
-
-  const bookUnderManagement = aprComm + mayComm + junCommEst;
-  const currentTier = getCommissionTier(wamgr);
-  const nextTier = getNextCommissionTier(wamgr);
-
-  const fullBase = marComm + aprComm + mayComm;
-  const additionalCommNeededForNextTier = nextTier
-    ? nextTier.wamgr * fullBase - partialNetGrowth
-    : 0;
+  // Commission outlook (Q2 2026) — shared math in src/lib/commission.ts:
+  // Telkom Apr/May billing artifacts normalized, June estimated at in-month pace.
+  const outlook = computeQ2Outlook(accounts);
+  const { wamgrToDate, wamgrProjected, tier: currentTier, nextTier, paceFactor } = outlook;
 
   // QoQ: compare current month to the prior-quarter close (Mar 2026 for Q2)
   const totalMRRQoQBase = accounts.reduce((s, a) => s + getQoQBaseMRR(a.revenueHistory), 0);
   const revenueChange = pctChange(totalMRR, totalMRRQoQBase);
+  // Same comparison with billing artifacts normalized (Telkom Apr/May)
+  const latestAdj = accounts.reduce((s, a) => s + billingAdjustment(a.name, latestMonth), 0);
+  const baseAdj = accounts.reduce((s, a) => s + billingAdjustment(a.name, "Mar 26"), 0);
+  const adjRevenueChange = pctChange(totalMRR + latestAdj, totalMRRQoQBase + baseAdj);
 
-  // Q2 commission outlook per the Jan 2026 plan: payout = tier rate × book under
-  // management (USD), converted to CAD; retention bonus estimated at Q1's rate
-  // until contract-level churn data exists.
-  const bookGrowthCommissionCAD = currentTier.rate * bookUnderManagement * USD_TO_CAD;
-  const retentionBonusCAD = retentionBonus(Q1_RETENTION);
-  const projectedCommissionCAD = bookGrowthCommissionCAD + retentionBonusCAD;
-  const tierProgressPct = wamgr < 0
-    ? 0
-    : nextTier
-      ? Math.min(100, Math.round(((wamgr - currentTier.wamgr) / (nextTier.wamgr - currentTier.wamgr)) * 100))
-      : 100;
+  // Month focus filter: defaults to the in-progress month (live MTD)
+  const monthOptions = [...selectedAM.revenueTrend.map(t => t.week), LIVE_META.mtdLabel].reverse();
+  const [focusMonth, setFocusMonth] = useState<string>(LIVE_META.mtdLabel);
+  const focusIsMTD = focusMonth === LIVE_META.mtdLabel;
+  const focusLabel = formatMonthLabel(focusMonth) + (focusIsMTD ? " MTD" : "");
+  const pacePct = (paceFactor - 1) * 100;
 
   // Current-month billings through last business day (from `npm run refresh`)
   const mtdTotal = accounts.reduce((s, a) => s + (a.mtdBilling?.mrr ?? 0), 0);
+  const focusBillings = focusIsMTD
+    ? mtdTotal
+    : accounts.reduce((s, a) => s + (a.revenueHistory.find(h => h.week === focusMonth)?.mrr ?? 0), 0);
+  const focusComm = focusIsMTD ? mtdCommissionable(accounts) : monthlyCommissionable(accounts, focusMonth);
+  const focusChange = focusIsMTD ? undefined : pctChange(focusBillings, totalMRRQoQBase);
+  const tierProgressPct = wamgrProjected < 0
+    ? 0
+    : nextTier
+      ? Math.min(100, Math.round(((wamgrProjected - currentTier.wamgr) / (nextTier.wamgr - currentTier.wamgr)) * 100))
+      : 100;
 
   return (
     <div className="animate-fade-in">
@@ -154,8 +82,8 @@ export default function Dashboard() {
                 Book billings are down {Math.abs(revenueChange).toFixed(1)}% QoQ — {formatCurrency(totalMRR)} vs {formatCurrency(totalMRRQoQBase)} at {QOQ_BASELINE_LABEL} close
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Source: f_billing_partner_snpm · {latestMonthLabel} actuals vs {QOQ_BASELINE_LABEL} close (prior-quarter baseline per commission plan)
-                {mtdTotal > 0 && <> · <span className="font-medium text-foreground">{formatMonthLabel(LIVE_META.mtdLabel)} month-to-date: {formatCurrency(mtdTotal)}</span> through {LIVE_META.dataThrough}</>}
+                Source: f_billing_partner_snpm · {latestMonthLabel} actuals vs {QOQ_BASELINE_LABEL} close (prior-quarter baseline per commission plan) · normalized for Telkom billing artifacts: {adjRevenueChange >= 0 ? "+" : ""}{adjRevenueChange.toFixed(1)}% QoQ
+                {mtdTotal > 0 && <> · <span className="font-medium text-foreground">{formatMonthLabel(LIVE_META.mtdLabel)} month-to-date: {formatCurrency(mtdTotal)}</span> through {LIVE_META.dataThrough} · pacing {pacePct >= 0 ? "+" : ""}{pacePct.toFixed(1)}% vs same span of {formatMonthLabel(LIVE_META.mtdPace.priorMonthLabel)}</>}
               </p>
             </div>
           </div>
@@ -167,37 +95,55 @@ export default function Dashboard() {
                 Book billings are up {revenueChange.toFixed(1)}% QoQ — {formatCurrency(totalMRR)} vs {formatCurrency(totalMRRQoQBase)} at {QOQ_BASELINE_LABEL} close
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Source: f_billing_partner_snpm · {latestMonthLabel} actuals vs {QOQ_BASELINE_LABEL} close (prior-quarter baseline per commission plan)
-                {mtdTotal > 0 && <> · <span className="font-medium text-foreground">{formatMonthLabel(LIVE_META.mtdLabel)} month-to-date: {formatCurrency(mtdTotal)}</span> through {LIVE_META.dataThrough}</>}
+                Source: f_billing_partner_snpm · {latestMonthLabel} actuals vs {QOQ_BASELINE_LABEL} close (prior-quarter baseline per commission plan) · normalized for Telkom billing artifacts: {adjRevenueChange >= 0 ? "+" : ""}{adjRevenueChange.toFixed(1)}% QoQ
+                {mtdTotal > 0 && <> · <span className="font-medium text-foreground">{formatMonthLabel(LIVE_META.mtdLabel)} month-to-date: {formatCurrency(mtdTotal)}</span> through {LIVE_META.dataThrough} · pacing {pacePct >= 0 ? "+" : ""}{pacePct.toFixed(1)}% vs same span of {formatMonthLabel(LIVE_META.mtdPace.priorMonthLabel)}</>}
               </p>
             </div>
           </div>
         )}
 
+        {/* Month focus filter */}
+        <div className="flex items-center justify-end gap-2 -mb-3">
+          <span className="text-xs text-muted-foreground">Focus month</span>
+          <select
+            value={focusMonth}
+            onChange={e => setFocusMonth(e.target.value)}
+            className="text-xs font-medium border border-border rounded-lg px-2 py-1 bg-background hover:bg-secondary transition-colors"
+          >
+            {monthOptions.map(m => (
+              <option key={m} value={m}>{formatMonthLabel(m)}{m === LIVE_META.mtdLabel ? " (month to date)" : ""}</option>
+            ))}
+          </select>
+        </div>
+
         {/* Commission KPIs */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
-            label="WAMGR (Current)"
-            value={`${(wamgr * 100).toFixed(2)}%`}
-            changeLabel={wamgr < 0 ? "Negative growth → 0% payout (retention bonus still pays)" : `At ${currentTier.label} tier → ${(currentTier.rate * 100).toFixed(2)}% of book`}
+            label="WAMGR (Q2 projected)"
+            value={`${(wamgrProjected * 100).toFixed(2)}%`}
+            changeLabel={wamgrProjected < 0
+              ? `To date: ${(wamgrToDate * 100).toFixed(2)}% · negative growth → 0% payout`
+              : `To date: ${(wamgrToDate * 100).toFixed(2)}% · at ${currentTier.label} tier → ${(currentTier.rate * 100).toFixed(2)}% of book`}
             icon={TrendingUp}
-            iconColor={wamgr >= 0.01 ? "text-v-green" : wamgr >= 0 ? "text-v-amber" : "text-v-red"}
-            trend={wamgr >= 0.01 ? "up" : "down"}
+            iconColor={wamgrProjected >= 0.01 ? "text-v-green" : wamgrProjected >= 0 ? "text-v-amber" : "text-v-red"}
+            trend={wamgrProjected >= 0.01 ? "up" : "down"}
             onClick={() => navigate("/commission")}
           />
           <StatCard
-            label={`Total Billings (${latestMonthLabel})`}
-            value={formatCurrency(totalMRR)}
-            change={revenueChange}
-            changeLabel={`vs ${QOQ_BASELINE_LABEL} close (QoQ)`}
+            label={`Total Billings (${focusLabel})`}
+            value={formatCurrency(focusBillings)}
+            change={focusChange}
+            changeLabel={focusIsMTD
+              ? `Through ${LIVE_META.dataThrough} · pacing ${pacePct >= 0 ? "+" : ""}${pacePct.toFixed(1)}% vs same span of ${formatMonthLabel(LIVE_META.mtdPace.priorMonthLabel)}`
+              : `vs ${QOQ_BASELINE_LABEL} close (QoQ)`}
             icon={DollarSign}
             iconColor="text-v-blue"
             onClick={() => navigate("/accounts")}
           />
           <StatCard
-            label={`Commissionable $ (${latestMonthLabel})`}
-            value={formatCurrency(mayComm)}
-            changeLabel={`Q2 book under management: ${formatCurrency(bookUnderManagement)}`}
+            label={`Commissionable $ (${focusLabel})`}
+            value={formatCurrency(focusComm)}
+            changeLabel={`Q2 book under management: ${formatCurrency(outlook.bookUnderManagement)}`}
             icon={DollarSign}
             iconColor="text-v-teal"
             onClick={() => navigate("/commission")}
@@ -208,7 +154,7 @@ export default function Dashboard() {
                 <AlertTriangle className="w-3.5 h-3.5 text-v-amber" />
                 <p className="text-xs font-medium text-muted-foreground">Gap to Next Tier</p>
               </div>
-              <p className="text-2xl font-bold text-v-amber">{nextTier ? formatCurrency(Math.max(0, additionalCommNeededForNextTier)) : "At max"}</p>
+              <p className="text-2xl font-bold text-v-amber">{nextTier ? formatCurrency(outlook.gapToNextTier) : "At max"}</p>
               <p className="text-[10px] text-muted-foreground mt-1">
                 {nextTier ? `Grow commissionable to hit ${nextTier.label} WAMGR` : "You're at the highest tier!"}
               </p>
@@ -256,7 +202,7 @@ export default function Dashboard() {
           <Card>
             <CardHeader>
               <CardTitle>Q2 Commission Outlook</CardTitle>
-              <p className="text-xs text-muted-foreground">Per Jan 2026 plan · Apr–Jun (Jun est. flat at May)</p>
+              <p className="text-xs text-muted-foreground">Per Jan 2026 plan · Jun projected at pace ({(paceFactor * 100).toFixed(0)}% of May) · Telkom artifacts normalized</p>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex flex-col items-center py-2">
@@ -266,14 +212,14 @@ export default function Dashboard() {
                     <path
                       d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                       fill="none"
-                      stroke={wamgr >= 0 ? "#00B67A" : "#EF4444"}
+                      stroke={wamgrProjected >= 0 ? "#00B67A" : "#EF4444"}
                       strokeWidth="3"
                       strokeDasharray={`${Math.max(tierProgressPct, 2)}, 100`}
                       strokeLinecap="round"
                     />
                   </svg>
                   <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <span className="text-xl font-bold text-foreground">{formatCurrency(projectedCommissionCAD)}</span>
+                    <span className="text-xl font-bold text-foreground">{formatCurrency(outlook.projectedCommissionCAD)}</span>
                     <span className="text-[10px] text-muted-foreground">projected (CAD)</span>
                   </div>
                 </div>
@@ -281,19 +227,23 @@ export default function Dashboard() {
               <div className="space-y-2">
                 <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground">WAMGR (Q2 to date)</span>
-                  <span className={`font-medium ${wamgr < 0 ? "text-v-red" : "text-v-green"}`}>{(wamgr * 100).toFixed(2)}%</span>
+                  <span className={`font-medium ${wamgrToDate < 0 ? "text-v-red" : "text-v-green"}`}>{(wamgrToDate * 100).toFixed(2)}%</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted-foreground">WAMGR (proj., Jun at pace)</span>
+                  <span className={`font-medium ${wamgrProjected < 0 ? "text-v-red" : "text-v-green"}`}>{(wamgrProjected * 100).toFixed(2)}%</span>
                 </div>
                 <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground">Eligible rate</span>
-                  <span className="font-medium">{(currentTier.rate * 100).toFixed(2)}%{wamgr < 0 && " (negative growth)"}</span>
+                  <span className="font-medium">{(currentTier.rate * 100).toFixed(2)}%{wamgrProjected < 0 && " (negative growth)"}</span>
                 </div>
                 <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground">Book growth commission</span>
-                  <span className="font-medium">{formatCurrency(bookGrowthCommissionCAD)}</span>
+                  <span className="font-medium">{formatCurrency(outlook.bookGrowthCommissionCAD)}</span>
                 </div>
                 <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground">Retention bonus (est. at Q1's {Q1_RETENTION.toFixed(1)}%)</span>
-                  <span className="font-medium">{formatCurrency(retentionBonusCAD)}</span>
+                  <span className="font-medium">{formatCurrency(outlook.retentionBonusCAD)}</span>
                 </div>
               </div>
               <Button variant="outline" size="sm" className="w-full" onClick={() => navigate("/commission")}>

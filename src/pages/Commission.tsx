@@ -3,7 +3,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAM } from "@/context/AMContext";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatMonthLabel } from "@/lib/utils";
+import {
+  COMMISSION_TIERS, blendedRate,
+  computeQ2Outlook, monthlyCommissionable, mtdCommissionable, q2EligiblePartners,
+} from "@/lib/commission";
+import { LIVE_META } from "@/data/liveMerge";
 import { useNavigate } from "react-router-dom";
 import {
   TrendingUp, TrendingDown, Users, ArrowRight,
@@ -16,16 +21,6 @@ import {
 
 // ── Commission plan constants (Jan 2026) ────────────────────────────────────
 
-const COMMISSION_TIERS = [
-  { wamgr: 0.0000, rate: 0.0060, label: "0.00%" },
-  { wamgr: 0.0025, rate: 0.0090, label: "0.25%" },
-  { wamgr: 0.0050, rate: 0.0120, label: "0.50%" },
-  { wamgr: 0.0100, rate: 0.0150, label: "1.00%" },
-  { wamgr: 0.0200, rate: 0.0188, label: "2.00%" },
-  { wamgr: 0.0300, rate: 0.0225, label: "3.00%" },
-  { wamgr: 0.0500, rate: 0.0300, label: "5.00%" },
-];
-
 const RETENTION_TIERS = [
   { pct: 0.950, bonus: 900 },
   { pct: 0.960, bonus: 1350 },
@@ -34,22 +29,6 @@ const RETENTION_TIERS = [
   { pct: 0.990, bonus: 2813 },
   { pct: 1.000, bonus: 3375 },
 ];
-
-function getCommissionTier(wamgr: number) {
-  let current = COMMISSION_TIERS[0];
-  for (const tier of COMMISSION_TIERS) {
-    if (wamgr >= tier.wamgr) current = tier;
-    else break;
-  }
-  return current;
-}
-
-function getNextCommissionTier(wamgr: number) {
-  for (let i = 0; i < COMMISSION_TIERS.length - 1; i++) {
-    if (wamgr < COMMISSION_TIERS[i + 1].wamgr) return COMMISSION_TIERS[i + 1];
-  }
-  return null;
-}
 
 function getRetentionTier(pct: number) {
   let current = { pct: 0, bonus: 0 };
@@ -73,63 +52,32 @@ export default function Commission() {
   const navigate = useNavigate();
   const { accounts } = useAM();
 
-  // Commissionable rate per account derived from Apr 2026 product breakdown
-  function commRate(acc: typeof accounts[0]) {
-    const totalBilling = acc.productBreakdown.reduce((s, p) => s + (p.mrr > 0 ? p.mrr : 0), 0);
-    const totalComm = acc.productBreakdown.reduce((s, p) => s + (p.mrr > 0 ? p.commissionable : 0), 0);
-    return totalBilling > 0 ? totalComm / totalBilling : 0.95;
-  }
-
-  // Existing partners = onboarded before Q2 (Apr 1, 2026). New partners excluded from growth calc per plan.
-  const existingPartners = accounts.filter(
-    a => a.mrr > 0 && new Date(a.onboardedDate) < new Date("2026-04-01")
-  );
-
-  // Monthly commissionable $ for a cohort at a given revenueHistory index (Onboarding excluded)
-  function monthlyComm(partners: typeof accounts, histIdx: number) {
-    return partners.reduce((s, acc) => {
-      const mrr = acc.revenueHistory[histIdx]?.mrr ?? 0;
-      const rate = commRate(acc);
-      const onboarding = acc.productBreakdown
-        .filter(p => p.category === "Onboarding")
-        .reduce((s2, p) => s2 + p.commissionable, 0);
-      return s + mrr * rate - onboarding;
-    }, 0);
-  }
-
-  // History indices: Nov25=0, Dec25=1, Jan26=2, Feb26=3, Mar26=4, Apr26=5, May26=6
-  const janComm = monthlyComm(existingPartners, 2);
-  const febComm = monthlyComm(existingPartners, 3);
-  const marComm = monthlyComm(existingPartners, 4); // Q2 baseline (Q1 ending book)
-  const aprComm = monthlyComm(existingPartners, 5);
-  const mayComm = monthlyComm(existingPartners, 6);
-
-  // Q2 2026 WAMGR: Apr and May actuals (June TBD)
-  // WAMGR = Net Quarterly Growth / sum of starting values each month
+  // Shared commission math (src/lib/commission.ts): Telkom Apr/May billing
+  // artifacts normalized, June projected at the current in-month pace.
+  const outlook = computeQ2Outlook(accounts);
+  const {
+    marComm, aprComm, mayComm, junCommEst,
+    wamgrToDate, wamgrProjected, tier: currentTier, nextTier,
+    bookUnderManagement, paceFactor, gapToNextTier,
+  } = outlook;
+  const eligible = q2EligiblePartners(accounts);
+  const janComm = monthlyCommissionable(eligible, "Jan 26");
+  const febComm = monthlyCommissionable(eligible, "Feb 26");
   const aprGrowth = aprComm - marComm;
   const mayGrowth = mayComm - aprComm;
-  const partialNetGrowth = aprGrowth + mayGrowth; // Jun growth unknown
-  const partialStartingBase = marComm + aprComm;  // Mar + Apr starting values (2 of 3 months)
-  const wamgr = partialStartingBase > 0 ? partialNetGrowth / partialStartingBase : 0;
-
-  // June estimate: flat at May (conservative)
-  const junCommEst = mayComm;
-
-  // Book under management Q2 = Apr + May + Jun (using Jun estimate)
-  const bookUnderManagement = aprComm + mayComm + junCommEst;
-  const currentTier = getCommissionTier(wamgr);
-  const nextTier = getNextCommissionTier(wamgr);
+  const partialNetGrowth = aprGrowth + mayGrowth;
+  const wamgr = wamgrProjected; // tier + payout follow the projected quarter
 
   const bookGrowthCommission = currentTier.rate * bookUnderManagement;
-
-  // Additional June growth needed to reach next tier
-  const fullBase = marComm + aprComm + mayComm;
-  const additionalCommNeededForNextTier = nextTier
-    ? nextTier.wamgr * fullBase - partialNetGrowth
-    : 0;
+  const additionalCommNeededForNextTier = gapToNextTier;
   const additionalCommissionAtNextTier = nextTier
     ? (nextTier.rate - currentTier.rate) * bookUnderManagement
     : 0;
+
+  // In-month standing (live, through last business day)
+  const mtdComm = mtdCommissionable(accounts);
+  const mtdBillings = accounts.reduce((s, a) => s + (a.mtdBilling?.mrr ?? 0), 0);
+  const pacePct = (paceFactor - 1) * 100;
 
   // ── Logo Retention ──────────────────────────────────────────────────────────
   // Rule: cohort = partners with billing > $0 in a given month, assigned to Tanmay.
@@ -174,12 +122,12 @@ export default function Commission() {
 
   // ── Chart data ──────────────────────────────────────────────────────────────
   const chartData = [
-    { month: "Jan 26", comm: janComm, isBaseline: true },
-    { month: "Feb 26", comm: febComm, isBaseline: true },
-    { month: "Mar 26", comm: marComm, isBaseline: true },
-    { month: "Apr 26", comm: aprComm, isBaseline: false },
-    { month: "May 26", comm: mayComm, isBaseline: false },
-    { month: "Jun 26 (est)", comm: junCommEst, isEstimate: true },
+    { month: "Jan '26", comm: janComm, isBaseline: true },
+    { month: "Feb '26", comm: febComm, isBaseline: true },
+    { month: "Mar '26", comm: marComm, isBaseline: true },
+    { month: "Apr '26", comm: aprComm, isBaseline: false },
+    { month: "May '26", comm: mayComm, isBaseline: false },
+    { month: "Jun '26 (proj)", comm: junCommEst, isEstimate: true },
   ];
 
   // ── Strategy Engine ─────────────────────────────────────────────────────────
@@ -226,7 +174,7 @@ export default function Commission() {
 
   // 3. Reverse declining at-risk accounts
   accounts.filter(a => a.health === "at-risk" && a.mrr < a.mrrPrev).forEach(acc => {
-    const rate = commRate(acc);
+    const rate = blendedRate(acc);
     const commDecline = (acc.mrrPrev - acc.mrr) * rate;
     strategies.push({
       account: acc.name,
@@ -251,10 +199,24 @@ export default function Commission() {
     <div className="animate-fade-in">
       <Header
         title="Commission Analytics"
-        subtitle={`Q2 2026 · Projected: ${formatCurrency(totalProjected)} · WAMGR: ${(wamgr * 100).toFixed(2)}% (${currentTier.label} tier) · Commissionable book: ${formatCurrency(bookUnderManagement)}`}
+        subtitle={`Q2 2026 · Projected: ${formatCurrency(totalProjected)} · WAMGR ${(wamgrToDate * 100).toFixed(2)}% to date, ${(wamgrProjected * 100).toFixed(2)}% projected (${currentTier.label} tier) · Commissionable book: ${formatCurrency(bookUnderManagement)}`}
       />
 
       <div className="p-6 space-y-6">
+        {/* ── In-month standing (live) ── */}
+        <div className="flex items-start gap-3 p-4 rounded-xl bg-v-blue/5 border border-v-blue/20">
+          <DollarSign className="w-4 h-4 text-v-blue mt-0.5 shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-foreground">
+              {formatMonthLabel(LIVE_META.mtdLabel)} so far: {formatCurrency(mtdComm)} commissionable ({formatCurrency(mtdBillings)} billings) through {LIVE_META.dataThrough}
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Pacing {pacePct >= 0 ? "+" : ""}{pacePct.toFixed(1)}% vs the same {LIVE_META.mtdPace.spanDays} days of {formatMonthLabel(LIVE_META.mtdPace.priorMonthLabel)} (invoiced $, credits excluded) ·
+              June projected at this pace: <span className="font-medium text-foreground">{formatCurrency(junCommEst)}</span> commissionable
+            </p>
+          </div>
+        </div>
+
         {/* ── Summary row ── */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <Card className="border-v-teal/30 bg-v-teal/5">
@@ -275,9 +237,9 @@ export default function Commission() {
                 <p className="text-xs font-medium text-muted-foreground">WAMGR</p>
               </div>
               <p className={`text-2xl font-bold ${wamgr >= 0.01 ? "text-v-green" : wamgr >= 0 ? "text-v-amber" : "text-v-red"}`}>
-                {(wamgr * 100).toFixed(2)}%
+                {(wamgrProjected * 100).toFixed(2)}%
               </p>
-              <p className="text-[10px] text-muted-foreground mt-1">At <strong>{currentTier.label}</strong> → {(currentTier.rate * 100).toFixed(2)}% of book</p>
+              <p className="text-[10px] text-muted-foreground mt-1">To date: {(wamgrToDate * 100).toFixed(2)}% · {wamgrProjected < 0 ? "negative growth → 0% payout" : `at ${currentTier.label} → ${(currentTier.rate * 100).toFixed(2)}% of book`}</p>
             </CardContent>
           </Card>
 
@@ -317,7 +279,7 @@ export default function Commission() {
                 <div>
                   <CardTitle>Commissionable Billings — Q2 2026</CardTitle>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Existing partners only · Onboarding excluded · f_billing_partner_snpm
+                    Existing partners only · Onboarding excluded · Telkom Apr/May artifacts normalized · Jun projected at {(paceFactor * 100).toFixed(0)}% of May (in-month pace)
                   </p>
                 </div>
                 <Badge variant={wamgr >= 0.01 ? "success" : wamgr >= 0 ? "warning" : "danger"}>
@@ -356,15 +318,15 @@ export default function Commission() {
                   </thead>
                   <tbody className="divide-y divide-border">
                     <tr className="bg-secondary/20 text-muted-foreground">
-                      <td className="px-3 py-2">Mar 26 (Q2 baseline)</td>
+                      <td className="px-3 py-2">Mar 2026 (Q2 baseline)</td>
                       <td className="text-right px-3 py-2 font-medium">{formatCurrency(marComm)}</td>
                       <td className="text-right px-3 py-2">—</td>
                       <td className="text-right px-3 py-2">—</td>
                     </tr>
                     {[
-                      { label: "Apr 26", comm: aprComm, growth: aprGrowth, prev: marComm },
-                      { label: "May 26", comm: mayComm, growth: mayGrowth, prev: aprComm },
-                      { label: "Jun 26 (est)", comm: junCommEst, growth: junCommEst - mayComm, prev: mayComm, isEst: true },
+                      { label: "Apr 2026", comm: aprComm, growth: aprGrowth, prev: marComm },
+                      { label: "May 2026", comm: mayComm, growth: mayGrowth, prev: aprComm },
+                      { label: "Jun 2026 (proj. at pace)", comm: junCommEst, growth: junCommEst - mayComm, prev: mayComm, isEst: true },
                     ].map(row => (
                       <tr key={row.label} className={(row as any).isEst ? "opacity-50 italic" : ""}>
                         <td className="px-3 py-2 font-medium">{row.label}</td>
@@ -380,13 +342,13 @@ export default function Commission() {
                   </tbody>
                   <tfoot>
                     <tr className="bg-secondary/50 font-semibold border-t-2 border-border">
-                      <td className="px-3 py-2">Q2 Partial WAMGR (Apr+May)</td>
+                      <td className="px-3 py-2">Q2 WAMGR (Jun projected)</td>
                       <td className="text-right px-3 py-2">{formatCurrency(bookUnderManagement)} <span className="text-[10px] font-normal text-muted-foreground">(book est.)</span></td>
                       <td className={`text-right px-3 py-2 ${partialNetGrowth >= 0 ? "text-v-green" : "text-v-red"}`}>
                         {partialNetGrowth >= 0 ? "+" : ""}{formatCurrency(partialNetGrowth)}
                       </td>
-                      <td className={`text-right px-3 py-2 ${wamgr >= 0 ? "text-v-green" : "text-v-red"}`}>
-                        WAMGR {(wamgr * 100).toFixed(2)}%
+                      <td className={`text-right px-3 py-2 ${wamgrProjected >= 0 ? "text-v-green" : "text-v-red"}`}>
+                        WAMGR {(wamgrProjected * 100).toFixed(2)}%
                       </td>
                     </tr>
                   </tfoot>
