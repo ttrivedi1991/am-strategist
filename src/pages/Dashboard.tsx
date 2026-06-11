@@ -3,7 +3,7 @@ import { StatCard } from "@/components/ui/stat-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { formatCurrency, pctChange, getQoQBaseMRR } from "@/lib/utils";
+import { formatCurrency, pctChange, getQoQBaseMRR, getLatestMRR, QOQ_BASELINE_LABEL } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { useAM } from "@/context/AMContext";
 import {
@@ -47,7 +47,9 @@ function getNextCommissionTier(wamgr: number) {
 export default function Dashboard() {
   const navigate = useNavigate();
   const { accounts, orgAlerts, selectedAM } = useAM();
-  const totalMRR = accounts.reduce((s, a) => s + a.mrr, 0);
+  // Latest-month billings from revenueHistory — same source as the trend chart,
+  // so the card and chart always agree (a.mrr can lag a month behind).
+  const totalMRR = accounts.reduce((s, a) => s + getLatestMRR(a.revenueHistory), 0);
 
   // Get latest month from revenueTrend (last entry)
   const latestTrend = selectedAM.revenueTrend[selectedAM.revenueTrend.length - 1];
@@ -95,10 +97,10 @@ export default function Dashboard() {
     ? nextTier.wamgr * fullBase - partialNetGrowth
     : 0;
 
-  // QoQ: compare current month to Jan 2026 (Q1 close)
-  const totalMRRQ4 = accounts.reduce((s, a) => s + getQoQBaseMRR(a.revenueHistory), 0);
+  // QoQ: compare current month to the prior-quarter close (Mar 2026 for Q2)
+  const totalMRRQoQBase = accounts.reduce((s, a) => s + getQoQBaseMRR(a.revenueHistory), 0);
   const quotaPct = Math.round((selectedAM.achievedMRR / selectedAM.quota) * 100);
-  const revenueChange = pctChange(totalMRR, totalMRRQ4);
+  const revenueChange = pctChange(totalMRR, totalMRRQoQBase);
 
   return (
     <div className="animate-fade-in">
@@ -114,10 +116,10 @@ export default function Dashboard() {
             <TrendingDown className="w-4 h-4 text-v-red mt-0.5 shrink-0" />
             <div>
               <p className="text-sm font-semibold text-foreground">
-                Book billings are down {Math.abs(revenueChange).toFixed(1)}% QoQ — {formatCurrency(totalMRR)} vs {formatCurrency(totalMRRQ4)} in Jan 2026
+                Book billings are down {Math.abs(revenueChange).toFixed(1)}% QoQ — {formatCurrency(totalMRR)} vs {formatCurrency(totalMRRQoQBase)} at {QOQ_BASELINE_LABEL} close
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Source: f_billing_partner_snpm · {latestMonth} actuals vs Jan 2026 baseline
+                Source: f_billing_partner_snpm · {latestMonth} actuals vs {QOQ_BASELINE_LABEL} close (prior-quarter baseline per commission plan)
               </p>
             </div>
           </div>
@@ -126,10 +128,10 @@ export default function Dashboard() {
             <TrendingUp className="w-4 h-4 text-v-teal mt-0.5 shrink-0" />
             <div>
               <p className="text-sm font-semibold text-foreground">
-                Book billings are up {revenueChange.toFixed(1)}% QoQ — {formatCurrency(totalMRR)} vs {formatCurrency(totalMRRQ4)} in Jan 2026
+                Book billings are up {revenueChange.toFixed(1)}% QoQ — {formatCurrency(totalMRR)} vs {formatCurrency(totalMRRQoQBase)} at {QOQ_BASELINE_LABEL} close
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Source: f_billing_partner_snpm · {latestMonth} actuals vs Jan 2026 baseline
+                Source: f_billing_partner_snpm · {latestMonth} actuals vs {QOQ_BASELINE_LABEL} close (prior-quarter baseline per commission plan)
               </p>
             </div>
           </div>
@@ -147,18 +149,18 @@ export default function Dashboard() {
             onClick={() => navigate("/commission")}
           />
           <StatCard
-            label="Total Billings"
+            label={`Total Billings (${latestMonth})`}
             value={formatCurrency(totalMRR)}
             change={revenueChange}
-            changeLabel="vs Jan 2026 (QoQ)"
+            changeLabel={`vs ${QOQ_BASELINE_LABEL} close (QoQ)`}
             icon={DollarSign}
             iconColor="text-v-blue"
             onClick={() => navigate("/accounts")}
           />
           <StatCard
-            label="Commissionable $"
-            value={formatCurrency(bookUnderManagement)}
-            changeLabel="Q2 book under management"
+            label={`Commissionable $ (${latestMonth})`}
+            value={formatCurrency(mayComm)}
+            changeLabel={`Q2 book under management: ${formatCurrency(bookUnderManagement)}`}
             icon={DollarSign}
             iconColor="text-v-teal"
             onClick={() => navigate("/commission")}

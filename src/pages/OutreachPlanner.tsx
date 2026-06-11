@@ -36,6 +36,7 @@ function getCommissionContext(account: Account): AccountCommissionContext {
   const latestMRR = latest?.mrr ?? account.mrr;
   const qoqBase = getQoQBaseMRR(account.revenueHistory);
   const commissionable = commissionableMRR(account.productBreakdown);
+  const breakdownBillings = account.productBreakdown.reduce((s, p) => s + (p.mrr > 0 ? p.mrr : 0), 0);
   const topProduct = [...account.productBreakdown]
     .filter(p => p.mrr > 0)
     .sort((a, b) => b.commissionable - a.commissionable)[0];
@@ -45,7 +46,7 @@ function getCommissionContext(account: Account): AccountCommissionContext {
     qoqBase,
     qoqDelta: latestMRR - qoqBase,
     commissionable,
-    effRate: account.mrr > 0 ? commissionable / account.mrr : 0.95,
+    effRate: breakdownBillings > 0 ? commissionable / breakdownBillings : 0.95,
     topProduct,
   };
 }
@@ -64,7 +65,7 @@ function buildSequence(account: Account, ctx: AccountCommissionContext): Outreac
       channel: "gchat",
       action: declining ? "Billing Check-in" : "Quick Touch-base",
       body: declining
-        ? `Hey ${first}, the ${ctx.latestLabel} billing run for ${account.name} came in at ${formatCurrency(ctx.latestMRR)}, down from ${formatCurrency(ctx.qoqBase)} in January. Is that a planned change on your end, or something we should dig into together?`
+        ? `Hey ${first}, the ${ctx.latestLabel} billing run for ${account.name} came in at ${formatCurrency(ctx.latestMRR)}, down from ${formatCurrency(ctx.qoqBase)} in March. Is that a planned change on your end, or something we should dig into together?`
         : `Hey ${first}, ${account.name}'s ${ctx.latestLabel} billing came in at ${formatCurrency(ctx.latestMRR)}. I have a few ideas from the 2026 AI roadmap that fit where you are — open to a quick call next week?`,
     },
     {
@@ -87,7 +88,7 @@ function buildSequence(account: Account, ctx: AccountCommissionContext): Outreac
       action: "Close the Loop",
       subject: `Following up — ${account.name} and the 2026 roadmap`,
       body: `Hi ${first},\n\nFollowing up on my note from last week. The short version: ${declining
-        ? `${account.name}'s billing is down ${formatCurrency(Math.abs(ctx.qoqDelta))}/mo since January, and I want to make sure nothing on our end is driving that`
+        ? `${account.name}'s billing is down ${formatCurrency(Math.abs(ctx.qoqDelta))}/mo since March, and I want to make sure nothing on our end is driving that`
         : `there are roadmap items this quarter that fit ${account.name}, and a 20-minute call beats a long email`}.\n\nIf the timing is off, say so and I'll come back to it in Q3.\n\nTanmay`,
     },
   ];
@@ -143,7 +144,7 @@ export default function OutreachPlanner() {
                   <p className="text-sm font-bold text-v-teal">{formatCurrency(ctx.commissionable)}</p>
                 </div>
                 <div className="p-2 rounded-lg bg-secondary/50 border border-border">
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">QoQ (vs Jan)</p>
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">QoQ (vs Mar close)</p>
                   <p className={cn("text-sm font-bold flex items-center gap-1", ctx.qoqDelta < 0 ? "text-v-red" : "text-v-green")}>
                     {ctx.qoqDelta < 0 ? <TrendingDown className="w-3 h-3" /> : <TrendingUp className="w-3 h-3" />}
                     {ctx.qoqDelta < 0 ? "−" : "+"}{formatCurrency(Math.abs(ctx.qoqDelta))}

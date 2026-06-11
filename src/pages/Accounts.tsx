@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { type Account } from "@/data/mock";
-import { formatCurrency, daysSince, pctChange, getQoQBaseMRR } from "@/lib/utils";
+import { formatCurrency, daysSince, pctChange, getQoQBaseMRR, getLatestMRR } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { useAM } from "@/context/AMContext";
 import {
@@ -56,8 +56,9 @@ export default function Accounts() {
       return order[a.health] - order[b.health];
     });
 
-  const activeAccounts = accounts.filter(a => a.mrr > 0);
-  const totalMRR = activeAccounts.reduce((s, a) => s + a.mrr, 0);
+  // Latest-month billings from revenueHistory — a.mrr can lag a month behind.
+  const activeAccounts = accounts.filter(a => getLatestMRR(a.revenueHistory) > 0);
+  const totalMRR = activeAccounts.reduce((s, a) => s + getLatestMRR(a.revenueHistory), 0);
   const totalCommissionable = activeAccounts.reduce((s, a) => s + commissionableForAccount(a), 0);
 
   return (
@@ -116,8 +117,9 @@ export default function Accounts() {
         {/* Account Cards */}
         <div className="space-y-2">
           {filtered.map(account => {
-            const decMRR = getQoQBaseMRR(account.revenueHistory);
-            const mrrChg = decMRR > 0 ? pctChange(account.mrr, decMRR) : 0;
+            const latestMRR = getLatestMRR(account.revenueHistory);
+            const qoqBase = getQoQBaseMRR(account.revenueHistory);
+            const mrrChg = qoqBase > 0 ? pctChange(latestMRR, qoqBase) : 0;
             const days = daysSince(account.lastMeeting);
             const health = healthBadge[account.health];
             const isExpanded = expanded === account.id;
@@ -156,8 +158,8 @@ export default function Accounts() {
 
                       {/* Billing MRR */}
                       <div>
-                        <p className="text-xs text-muted-foreground">Billing MRR</p>
-                        <p className="text-sm font-bold text-foreground">{formatCurrency(account.mrr)}</p>
+                        <p className="text-xs text-muted-foreground">Billing MRR ({account.revenueHistory[account.revenueHistory.length - 1]?.week ?? ""})</p>
+                        <p className="text-sm font-bold text-foreground">{formatCurrency(latestMRR)}</p>
                         <div className="flex items-center gap-1">
                           {mrrChg > 0
                             ? <TrendingUp className="w-3 h-3 text-v-green" />
