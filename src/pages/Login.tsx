@@ -1,24 +1,16 @@
-import { useState } from "react";
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAM } from "@/context/AMContext";
-import { AM_ROSTER } from "@/data/mock";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function Login() {
-  const [amId, setAmId] = useState(AM_ROSTER[0].id);
-  const [password, setPassword] = useState("");
-  const { login } = useAM();
+  const { user, loading, authError, loginWithGoogle } = useAM();
   const navigate = useNavigate();
 
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    // In a real app, we'd verify the password here.
-    // For this mock, any password (or none) works as long as the AM ID is valid.
-    if (login(amId)) {
-      navigate("/");
-    }
-  };
+  useEffect(() => {
+    if (user && !loading) navigate("/");
+  }, [user, loading, navigate]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted/40 px-4">
@@ -26,51 +18,27 @@ export default function Login() {
         <CardHeader className="space-y-1 text-center">
           <CardTitle className="text-2xl font-bold">AM Strategist</CardTitle>
           <CardDescription>
-            Enter your credentials to access your dashboard
+            Sign in with your Vendasta Google account to access your book of business.
           </CardDescription>
         </CardHeader>
-        <form onSubmit={handleLogin}>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <label htmlFor="am-select" className="text-sm font-medium leading-none">
-                Account Manager
-              </label>
-              <select
-                id="am-select"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                value={amId}
-                onChange={(e) => setAmId(e.target.value)}
-              >
-                {AM_ROSTER.map((am) => (
-                  <option key={am.id} value={am.id}>
-                    {am.name} ({am.email})
-                  </option>
-                ))}
-              </select>
+        <CardContent className="space-y-4">
+          {authError && (
+            <div className="rounded-lg border border-v-red/20 bg-v-red/5 p-3 text-sm text-v-red">
+              {authError}
             </div>
-            <div className="space-y-2">
-              <label htmlFor="password" className="text-sm font-medium leading-none">
-                Password
-              </label>
-              <input
-                id="password"
-                type="password"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-              <p className="text-[0.8rem] text-muted-foreground">
-                Hint: Any password works in this demo.
-              </p>
-            </div>
-          </CardContent>
-          <CardFooter>
-            <Button type="submit" className="w-full">
-              Login
-            </Button>
-          </CardFooter>
-        </form>
+          )}
+          <Button
+            type="button"
+            className="w-full"
+            disabled={loading}
+            onClick={loginWithGoogle}
+          >
+            {loading ? "Signing in…" : "Continue with Google"}
+          </Button>
+          <p className="text-center text-[0.8rem] text-muted-foreground">
+            Access is restricted to assigned Account Managers on @vendasta.com accounts.
+          </p>
+        </CardContent>
       </Card>
     </div>
   );

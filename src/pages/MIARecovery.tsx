@@ -10,7 +10,7 @@ import {
   UserX, Clock, TrendingDown, AlertTriangle,
   Mail, Calendar, ArrowRight, Flame, MessageCircle
 } from "lucide-react";
-import { type Account } from "@/data/mock";
+import { type Account } from "@/data/types";
 
 const MIA_THRESHOLD = 45;
 

@@ -43,7 +43,7 @@ interface ActionItem {
   rationale: string;
 }
 
-function parseBriefToActions(brief: string, accounts: import("@/data/mock").Account[]): ActionItem[] {
+function parseBriefToActions(brief: string, accounts: import("@/data/types").Account[]): ActionItem[] {
   const hasAIReceptionist = brief.toLowerCase().includes("ai receptionist");
   const hasReviewResponder = brief.toLowerCase().includes("review responder");
   const hasContentWriter = brief.toLowerCase().includes("content writer");

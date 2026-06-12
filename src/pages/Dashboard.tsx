@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatCurrency, formatMonthLabel, pctChange, getQoQBaseMRR, getLatestMRR, QOQ_BASELINE_LABEL } from "@/lib/utils";
 import { computeQ2Outlook, mtdCommissionable, monthlyCommissionable, billingAdjustment, Q1_RETENTION } from "@/lib/commission";
-import { LIVE_META } from "@/data/liveMerge";
+
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAM } from "@/context/AMContext";
@@ -22,7 +22,10 @@ const priorityLabel = { high: "Urgent", medium: "This Week", low: "FYI" } as con
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { accounts, orgAlerts, selectedAM } = useAM();
+  const am = useAM();
+  const { accounts, orgAlerts, selectedAM } = am;
+  // Non-null: pages render only after AMContext finishes loading (ProtectedRoute gate).
+  const LIVE_META = am.liveMeta!;
   // Latest-month billings from revenueHistory — same source as the trend chart,
   // so the card and chart always agree (a.mrr can lag a month behind).
   const totalMRR = accounts.reduce((s, a) => s + getLatestMRR(a.revenueHistory), 0);
@@ -33,14 +36,14 @@ export default function Dashboard() {
   const latestMonthLabel = formatMonthLabel(latestMonth); // "May 2026", never date-like
 
   // Commission outlook (Q2 2026) — shared math in src/lib/commission.ts:
-  // Telkom Apr/May billing artifacts normalized, June estimated at in-month pace.
+  // one-time billing artifacts normalized for the projection; June at in-month pace.
   const outlook = computeQ2Outlook(accounts);
   const { wamgrToDate, wamgrProjected, tier: currentTier, nextTier, paceFactor } = outlook;
 
   // QoQ: compare current month to the prior-quarter close (Mar 2026 for Q2)
   const totalMRRQoQBase = accounts.reduce((s, a) => s + getQoQBaseMRR(a.revenueHistory), 0);
   const revenueChange = pctChange(totalMRR, totalMRRQoQBase);
-  // Context view: same comparison excluding the one-time Telkom credit (official numbers keep it)
+  // Context view: same comparison excluding one-time billing credits (official numbers keep them)
   const latestAdj = accounts.reduce((s, a) => s + billingAdjustment(a.name, latestMonth), 0);
   const baseAdj = accounts.reduce((s, a) => s + billingAdjustment(a.name, "Mar 26"), 0);
   const adjRevenueChange = pctChange(totalMRR + latestAdj, totalMRRQoQBase + baseAdj);
@@ -82,7 +85,7 @@ export default function Dashboard() {
                 Book billings are down {Math.abs(revenueChange).toFixed(1)}% QoQ — {formatCurrency(totalMRR)} vs {formatCurrency(totalMRRQoQBase)} at {QOQ_BASELINE_LABEL} close
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Source: f_billing_partner_snpm · {latestMonthLabel} actuals vs {QOQ_BASELINE_LABEL} close (prior-quarter baseline per commission plan) · excluding the one-time Telkom credit: {adjRevenueChange >= 0 ? "+" : ""}{adjRevenueChange.toFixed(1)}% QoQ
+                Source: f_billing_partner_snpm · {latestMonthLabel} actuals vs {QOQ_BASELINE_LABEL} close (prior-quarter baseline per commission plan) · excluding one-time billing credits: {adjRevenueChange >= 0 ? "+" : ""}{adjRevenueChange.toFixed(1)}% QoQ
                 {mtdTotal > 0 && <> · <span className="font-medium text-foreground">{formatMonthLabel(LIVE_META.mtdLabel)} month-to-date: {formatCurrency(mtdTotal)}</span> through {LIVE_META.dataThrough} · pacing {pacePct >= 0 ? "+" : ""}{pacePct.toFixed(1)}% vs same span of {formatMonthLabel(LIVE_META.mtdPace.priorMonthLabel)}</>}
               </p>
             </div>
@@ -95,7 +98,7 @@ export default function Dashboard() {
                 Book billings are up {revenueChange.toFixed(1)}% QoQ — {formatCurrency(totalMRR)} vs {formatCurrency(totalMRRQoQBase)} at {QOQ_BASELINE_LABEL} close
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Source: f_billing_partner_snpm · {latestMonthLabel} actuals vs {QOQ_BASELINE_LABEL} close (prior-quarter baseline per commission plan) · excluding the one-time Telkom credit: {adjRevenueChange >= 0 ? "+" : ""}{adjRevenueChange.toFixed(1)}% QoQ
+                Source: f_billing_partner_snpm · {latestMonthLabel} actuals vs {QOQ_BASELINE_LABEL} close (prior-quarter baseline per commission plan) · excluding one-time billing credits: {adjRevenueChange >= 0 ? "+" : ""}{adjRevenueChange.toFixed(1)}% QoQ
                 {mtdTotal > 0 && <> · <span className="font-medium text-foreground">{formatMonthLabel(LIVE_META.mtdLabel)} month-to-date: {formatCurrency(mtdTotal)}</span> through {LIVE_META.dataThrough} · pacing {pacePct >= 0 ? "+" : ""}{pacePct.toFixed(1)}% vs same span of {formatMonthLabel(LIVE_META.mtdPace.priorMonthLabel)}</>}
               </p>
             </div>
@@ -246,7 +249,7 @@ export default function Dashboard() {
                   <span className="font-medium">{formatCurrency(outlook.retentionBonusCAD)}</span>
                 </div>
                 <p className="text-[10px] text-muted-foreground pt-1 border-t border-border">
-                  To-date WAMGR carries May's −$20K Telkom credit (reverses April's overcharge). Quarterly growth telescopes to Jun − Mar close, so the wash cancels out by quarter end.
+                  To-date WAMGR carries a one-time May billing credit that reverses an April overcharge. Quarterly growth telescopes to Jun − Mar close, so the wash cancels out by quarter end.
                 </p>
               </div>
               <Button variant="outline" size="sm" className="w-full" onClick={() => navigate("/commission")}>

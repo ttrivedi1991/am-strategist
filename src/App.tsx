@@ -12,8 +12,16 @@ import Commission from "@/pages/Commission";
 import Login from "@/pages/Login";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAM();
-  if (!isAuthenticated) {
+  const { user, loading } = useAM();
+  if (loading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3 text-muted-foreground">
+        <div className="w-6 h-6 border-2 border-v-blue border-t-transparent rounded-full animate-spin" />
+        <p className="text-sm">Loading your book…</p>
+      </div>
+    );
+  }
+  if (!user) {
     return <Navigate to="/login" replace />;
   }
   return <>{children}</>;

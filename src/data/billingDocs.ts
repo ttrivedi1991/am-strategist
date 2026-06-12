@@ -2,6 +2,7 @@
 // Source: BigQuery data-warehouse-460017.management.f_billing_tx,
 // filtered to assigned_sales_person = ttrivedi@vendasta.com. Generated 2026-06-12.
 
+// SEED-ONLY (scripts/seed-firestore.mjs). Not imported by bundled app code.
 export interface BillingDoc {
   id: string;        // invoice_identifier_dnk
   date: string;

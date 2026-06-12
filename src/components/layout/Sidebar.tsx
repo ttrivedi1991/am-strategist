@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { AM_ROSTER } from "@/data/mock";
 import { useAM } from "@/context/AMContext";
 import {
   LayoutDashboard, Users, BrainCircuit, Bell, Send, UserX, FileText, Zap, ChevronUp, Check, LogOut, TrendingUp
@@ -25,12 +24,12 @@ const AVATAR_COLORS: Record<string, string> = {
 };
 
 export function Sidebar() {
-  const { selectedAM, setSelectedAM, logout } = useAM();
+  const { selectedAM, setSelectedAM, logout, roster } = useAM();
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     navigate("/login");
   };
 
@@ -92,7 +91,7 @@ export function Sidebar() {
             <p className="px-3 pt-2.5 pb-1.5 text-[10px] font-semibold text-white/30 uppercase tracking-widest">
               Enterprise Team
             </p>
-            {AM_ROSTER.map(am => (
+            {roster.map(am => (
               <button
                 key={am.id}
                 onClick={() => { setSelectedAM(am); setOpen(false); }}

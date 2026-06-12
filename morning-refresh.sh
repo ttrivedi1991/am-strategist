@@ -11,10 +11,17 @@ cd "$REPO" || exit 1
 OUT=$(node scripts/refresh-data.mjs 2>&1)
 EXIT=$?
 
-if [ $EXIT -eq 0 ] && ! git diff --quiet -- src/data/live.ts src/data/billingDocs.ts; then
-  git add src/data/live.ts src/data/billingDocs.ts
-  git commit --quiet -m "Auto-refresh: BigQuery billing data $(date +%Y-%m-%d)"
-  OUT="$OUT | committed"
+if [ $EXIT -eq 0 ]; then
+  # Push the freshly-generated billing into Firestore — the live app reads from
+  # there (the bundle carries no data). Seeds even if the .ts diff is empty,
+  # since MTD/pace values change intraday.
+  SEED=$(npx tsx scripts/seed-firestore.ts 2>&1)
+  OUT="$OUT | seed: $(echo "$SEED" | tail -1)"
+  if ! git diff --quiet -- src/data/live.ts src/data/billingDocs.ts; then
+    git add src/data/live.ts src/data/billingDocs.ts
+    git commit --quiet -m "Auto-refresh: BigQuery billing data $(date +%Y-%m-%d)"
+    OUT="$OUT | committed"
+  fi
 fi
 
 echo "[$TIMESTAMP] refresh(${EXIT}): $(echo "$OUT" | tail -1)" >> "$LOG"

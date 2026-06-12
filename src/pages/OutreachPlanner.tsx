@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn, formatCurrency, getQoQBaseMRR, commissionableMRR } from "@/lib/utils";
 import { useAM } from "@/context/AMContext";
-import type { Account } from "@/data/mock";
+import type { Account } from "@/data/types";
 import {
   Send, Mail, Calendar, Copy, CheckCircle2,
   ChevronDown, ChevronRight, Clock, Phone, DollarSign,

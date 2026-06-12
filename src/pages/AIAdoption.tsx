@@ -3,8 +3,7 @@ import { Header } from "@/components/layout/Header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { AI_ADOPTION_DATA } from "@/data/mock";
-import type { Account } from "@/data/mock";
+import type { Account } from "@/data/types";
 import { useNavigate } from "react-router-dom";
 import { useAM } from "@/context/AMContext";
 import { formatCurrency, commissionableMRR } from "@/lib/utils";
@@ -16,11 +15,11 @@ import { CheckCircle2, ArrowRight, TrendingUp } from "lucide-react";
 
 export default function AIAdoption() {
   const navigate = useNavigate();
-  const { accounts, selectedAM } = useAM();
+  const { accounts, selectedAM, aiAdoption } = useAM();
   const [expandedAccount, setExpandedAccount] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState<"all" | "ai" | "noai" | "multi">("all");
 
-  const trendData = AI_ADOPTION_DATA[selectedAM.id] ?? [];
+  const trendData = aiAdoption[selectedAM.id] ?? [];
 
   const withAI = accounts.filter(a => a.aiAdoption !== "none");
   const noAI = accounts.filter(a => a.aiAdoption === "none");

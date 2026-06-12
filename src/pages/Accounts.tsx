@@ -3,8 +3,7 @@ import { Header } from "@/components/layout/Header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { type Account } from "@/data/mock";
-import { BILLING_DOCS, BILLING_DOCS_MTD } from "@/data/billingDocs";
+import { type Account } from "@/data/types";
 import { formatCurrency, daysSince, pctChange, getQoQBaseMRR, getLatestMRR } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { useAM } from "@/context/AMContext";
@@ -26,7 +25,7 @@ const healthBadge: Record<Account["health"], { variant: "success" | "warning" | 
 
 export default function Accounts() {
   const navigate = useNavigate();
-  const { accounts } = useAM();
+  const { accounts, billingDocs: BILLING_DOCS, billingDocsMtd: BILLING_DOCS_MTD } = useAM();
   const [search, setSearch] = useState("");
   const [filterHealth, setFilterHealth] = useState("all");
   const [filterVertical, setFilterVertical] = useState("all");

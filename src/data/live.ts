@@ -4,6 +4,7 @@
 
 export interface LiveMonth { week: string; mrr: number; }
 export interface LivePartnerBilling { name: string; months: LiveMonth[]; mtd: LiveMonth | null; }
+// SEED-ONLY (scripts/seed-firestore.mjs + scripts/refresh-data.mjs). Not bundled.
 
 export const LIVE_META = {
   generatedAt: "2026-06-12",

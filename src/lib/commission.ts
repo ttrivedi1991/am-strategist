@@ -1,8 +1,8 @@
 // Commission math per the Jan 2026 AM Channel Sales plan, shared by
 // Dashboard and Commission pages. Rates and tiers verified against the
 // official plan PDF and the Q1-2026 commission statement (Jun 11, 2026).
-import type { Account } from "@/data/mock";
-import { LIVE_META } from "@/data/liveMerge";
+import type { Account } from "@/data/types";
+import { getLiveMeta, getAppData } from "@/data/store";
 
 export const COMMISSION_TIERS = [
   { wamgr: 0.0000, rate: 0.0060, label: "0.00%" },
@@ -50,20 +50,17 @@ export function retentionBonus(pct: number): number {
   return payout;
 }
 
-// One-time billing artifacts. NOT applied to official monthly numbers — those
-// stay raw, matching the HOS dashboard and finance's pipeline (credits count in
-// the month they land; any payout adjustment is finance's discretion). Because
-// Net Quarterly Growth telescopes to (Jun close − Mar close), the Apr overcharge
-// and May credit cancel out of Q2 WAMGR by quarter close on their own. The only
-// place the artifact genuinely distorts is a projection anchored on the affected
-// month — so these are used solely to build a clean base for the June estimate.
-export const BILLING_ADJUSTMENTS: { account: string; week: string; amount: number; reason: string }[] = [
-  { account: "Telkom SA Soc Ltd.", week: "Apr 26", amount: -20000, reason: "April subscription overcharge, credited back in May (CM35034)" },
-  { account: "Telkom SA Soc Ltd.", week: "May 26", amount: 20000, reason: "May credit offsetting the April overcharge" },
-];
-
+// One-time billing artifacts (loaded from Firestore — they name a partner and
+// credit note, so they're confidential and never bundled). NOT applied to
+// official monthly numbers — those stay raw, matching the HOS dashboard and
+// finance's pipeline (credits count in the month they land; any payout
+// adjustment is finance's discretion). Because Net Quarterly Growth telescopes
+// to (Jun close − Mar close), an intra-quarter overcharge and its reversing
+// credit cancel out of Q2 WAMGR on their own; the only place the artifact
+// distorts is a projection anchored on the affected month — so these are used
+// solely to build a clean base for the in-progress-month estimate.
 export function billingAdjustment(accountName: string, week: string): number {
-  return BILLING_ADJUSTMENTS
+  return getAppData().billingAdjustments
     .filter(a => a.account === accountName && a.week === week)
     .reduce((s, a) => s + a.amount, 0);
 }
@@ -116,7 +113,7 @@ export function mtdCommissionable(accounts: Account[]): number {
 // In-month pace: invoiced dollars this month vs the same day-span last month.
 // 1.0 = tracking exactly at last month's level.
 export function mtdPaceFactor(): number {
-  const p = LIVE_META.mtdPace;
+  const p = getLiveMeta().mtdPace;
   return p && p.priorSameSpan > 0 ? p.current / p.priorSameSpan : 1;
 }
 

@@ -1,6 +1,5 @@
 import { Bell, RefreshCw } from "lucide-react";
-import { ACCOUNTS, ORG_ALERTS } from "@/data/mock";
-import { LIVE_META } from "@/data/liveMerge";
+import { useAM } from "@/context/AMContext";
 import { formatDate } from "@/lib/utils";
 
 interface HeaderProps {
@@ -9,8 +8,9 @@ interface HeaderProps {
 }
 
 export function Header({ title, subtitle }: HeaderProps) {
-  const urgentAlerts = ORG_ALERTS.filter(a => a.urgency === "high").length;
-  const miaCount = ACCOUNTS.filter(a => a.isMIA).length;
+  const { accounts, orgAlerts, liveMeta } = useAM();
+  const urgentAlerts = orgAlerts.filter(a => a.urgency === "high").length;
+  const miaCount = accounts.filter(a => a.isMIA).length;
 
   return (
     <header className="sticky top-0 z-30 flex items-center justify-between px-6 py-3.5 bg-background/90 backdrop-blur border-b border-border">
@@ -25,7 +25,7 @@ export function Header({ title, subtitle }: HeaderProps) {
         </span>
         <span className="text-[10px] text-muted-foreground hidden sm:flex items-center gap-1 px-2 py-0.5 rounded-full border border-border bg-secondary">
           <span className="w-1.5 h-1.5 rounded-full bg-v-teal inline-block" />
-          Data through {formatDate(`${LIVE_META.dataThrough}T12:00:00`)} · BigQuery
+          {liveMeta ? <>Data through {formatDate(`${liveMeta.dataThrough}T12:00:00`)} · BigQuery</> : "BigQuery"}
         </span>
 
         {(urgentAlerts > 0 || miaCount > 0) && (

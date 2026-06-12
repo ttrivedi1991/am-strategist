@@ -1,76 +1,8 @@
-export type Vertical =
-  | "PropTech"
-  | "FinTech"
-  | "Telecom"
-  | "Industry Association"
-  | "Digital Marketing"
-  | "Multifamily Tech"
-  | "Automotive Tech"
-  | "Hospitality Tech"
-  | "Healthcare Tech"
-  | "Home Services Tech"
-  | "Data & Analytics"
-  | "Franchise Tech"
-  | "Domain & Hosting"
-  | "AI / SaaS"
-  | "Agency"
-  | "Media & Publishing";
-
-export type AccountHealth = "healthy" | "at-risk" | "churning" | "champion";
-export type AIAdoptionTier = "none" | "basic" | "growth" | "power";
-
-export interface Account {
-  amId?: string; // defaults to "tanmay" if omitted
-  id: string;
-  name: string;
-  internalId: string;
-  contactName: string;
-  contactTitle: string;
-  contactEmail: string;
-  vertical: Vertical;
-  country: string;
-  mrr: number;
-  mrrPrev: number;
-  arr: number;
-  health: AccountHealth;
-  aiAdoption: AIAdoptionTier;
-  lastMeeting: string;
-  lastActivity: string;
-  products: string[];
-  productBreakdown: Array<{ name: string; category: string; mrr: number; commissionable: number }>;
-  website: string;
-  notes: string;
-  isMIA: boolean;
-  onboardedDate: string;
-  revenueHistory: { week: string; mrr: number }[];
-  agid?: string; // Vendasta vmf_account_group_id from dim_current_partner
-  mtdBilling?: { week: string; mrr: number }; // current-month billings through last business day (set by liveMerge)
-}
-
-export interface AMProfile {
-  id: string;
-  name: string;
-  email: string;
-  title: string;
-  avatar: string;
-  quota: number;
-  achievedMRR: number;
-  revenueTrend: { week: string; mrr: number }[];
-  weeklyActions: { id: number; priority: string; account: string; action: string; due: string }[];
-}
-
-export interface OrgAlert {
-  id: string;
-  accountId: string;
-  accountName: string;
-  type: "acquisition" | "leadership" | "expansion" | "gtm-change" | "funding" | "award";
-  title: string;
-  summary: string;
-  source: string;
-  date: string;
-  urgency: "high" | "medium" | "low";
-  actionSuggestion: string;
-}
+// Curated account metadata + static fallback history. SEED-ONLY: used by
+// scripts/seed-firestore.mjs to populate Firestore, never imported by bundled
+// app code (which loads data at runtime). Types live in ./types.
+import type { Account, AMProfile, OrgAlert } from "./types";
+export type { Vertical, AccountHealth, AIAdoptionTier, Account, AMProfile, OrgAlert } from "./types";
 
 export const AM_ROSTER: AMProfile[] = [
   {
@@ -3174,4 +3106,11 @@ export const WEEKLY_ACTIONS = [
   { id: 6, priority: "medium", account: "VisitorReach", action: "Just raised $2M seed — congratulate Priya and schedule an expansion call while momentum is high.", due: "Apr 30" },
   { id: 7, priority: "medium", account: "DealerRater.com", action: "New EV product line launching — align AI Suite pitch to their EV dealership vertical. Great expansion timing.", due: "Apr 30" },
   { id: 8, priority: "low", account: "TripAdvisor", action: "Consistent slow decline — MIA 53 days. Re-engage with a hospitality AI benchmarking email to Adam Ochman.", due: "May 2" },
+];
+
+// One-time billing artifacts for the commission projection (SEED-ONLY → Firestore meta).
+import type { BillingAdjustment } from "./types";
+export const BILLING_ADJUSTMENTS: BillingAdjustment[] = [
+  { account: "Telkom SA Soc Ltd.", week: "Apr 26", amount: -20000, reason: "April subscription overcharge, credited back in May (CM35034)" },
+  { account: "Telkom SA Soc Ltd.", week: "May 26", amount: 20000, reason: "May credit offsetting the April overcharge" },
 ];

@@ -8,7 +8,7 @@ import {
   COMMISSION_TIERS, blendedRate,
   computeQ2Outlook, monthlyCommissionable, mtdCommissionable, q2EligiblePartners,
 } from "@/lib/commission";
-import { LIVE_META } from "@/data/liveMerge";
+
 import { useNavigate } from "react-router-dom";
 import {
   TrendingUp, TrendingDown, Users, ArrowRight,
@@ -50,7 +50,10 @@ function getNextRetentionTier(pct: number) {
 
 export default function Commission() {
   const navigate = useNavigate();
-  const { accounts } = useAM();
+  const am = useAM();
+  const { accounts } = am;
+  // Non-null: pages render only after AMContext finishes loading (ProtectedRoute gate).
+  const LIVE_META = am.liveMeta!;
 
   // Shared commission math (src/lib/commission.ts): official raw billings,
   // June projected from a credit-free May base at the current in-month pace.
