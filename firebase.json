@@ -1,0 +1,15 @@
+{
+  "hosting": {
+    "site": "am-strategist",
+    "public": "dist",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "rewrites": [
+      { "source": "**", "destination": "/index.html" }
+    ]
+  },
+  "firestore": {
+    "database": "am-strategist",
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  }
+}

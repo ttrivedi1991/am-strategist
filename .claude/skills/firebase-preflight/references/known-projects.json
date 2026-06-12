@@ -1,0 +1,34 @@
+{
+  "vendasta-citizen-developers": {
+    "multi_site": true,
+    "known_sites": [
+      "agency-breakdown",
+      "franchise-breakdown",
+      "patch-analyst",
+      "vflow",
+      "am-strategist"
+    ],
+    "known_databases": [
+      "(default)",
+      "patch-analyst",
+      "vflow",
+      "am-strategist"
+    ]
+  },
+  "ai-dashboard-489320": {
+    "multi_site": false,
+    "known_sites": [],
+    "known_databases": [
+      "(default)"
+    ]
+  },
+  "citdev-firebase": {
+    "multi_site": true,
+    "known_sites": [
+      "vendasta-subscription-calculator"
+    ],
+    "known_databases": [
+      "(default)"
+    ]
+  }
+}
