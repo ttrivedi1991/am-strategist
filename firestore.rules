@@ -1,8 +1,25 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // SECURITY: vendasta-citizen-developers is a SHARED multi-app Firebase
+    // project. Firebase Auth is project-scoped, not database-scoped, so any ID
+    // token minted anywhere in the project satisfies `request.auth != null`.
+    // This database holds real partner billing/commission data, so access is
+    // restricted to an explicit allowlist of verified AM emails — never the
+    // project-wide `request.auth != null` default.
+    function isAuthorizedAM() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in [
+          'ttrivedi@vendasta.com',  // Tanmay Trivedi
+          'dkupietz@vendasta.com',  // Desiree Kupietz
+          'astark@vendasta.com'     // Adam Stark
+        ];
+    }
+
     match /{document=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isAuthorizedAM();
     }
   }
 }

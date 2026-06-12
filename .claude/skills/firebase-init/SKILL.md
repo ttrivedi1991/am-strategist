@@ -89,12 +89,27 @@ If the database already exists, `gcloud` will return an error — that's fine, j
 Also create starter Firestore files:
 
 **`firestore.rules`**:
+
+> ⚠️ **Do NOT ship `if request.auth != null` on this shared project.** Firebase
+> Auth is project-scoped, not database-scoped — on a multi-app project like
+> `vendasta-citizen-developers`, any ID token minted by *any* sibling app (some
+> have open sign-in providers) satisfies `request.auth != null` and would get
+> full read/write to your named database. Scope access to an explicit allowlist
+> of the verified emails (or UIDs) that should use this app:
+
 ```
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    function isAuthorizedUser() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in [
+          'you@vendasta.com'  // replace with the real allowlist for this app
+        ];
+    }
     match /{document=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isAuthorizedUser();
     }
   }
 }
