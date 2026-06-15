@@ -244,7 +244,7 @@ export default function Accounts() {
                       <div className="flex items-center gap-1.5">
                         <Package className="w-3 h-3 text-muted-foreground" />
                         <span className="text-[10px] font-medium text-muted-foreground">
-                          {account.productBreakdown!.filter(p => p.mrr > 0).length} products ·{" "}
+                          {account.productBreakdown!.filter(p => p.mrr > 0 || (p.quantity ?? 0) > 0).length} products ·{" "}
                           {formatCurrency(account.productBreakdown!.reduce((s, p) => s + (p.mrr > 0 ? p.mrr : 0), 0))} billing
                         </span>
                       </div>
@@ -279,7 +279,7 @@ export default function Accounts() {
 
                       <div className="divide-y divide-border">
                         {account.productBreakdown!
-                          .filter(p => p.mrr > 0)
+                          .filter(p => p.mrr > 0 || (p.quantity ?? 0) > 0)
                           .map(p => {
                             const inclRate = p.mrr > 0 ? Math.round(p.commissionable / p.mrr * 100) : 0;
                             return (
@@ -292,11 +292,12 @@ export default function Accounts() {
                                 <div className="w-28 text-right font-semibold tnum">{formatCurrency(p.mrr)}</div>
                                 <div className="w-32 text-right font-semibold text-v-teal tnum">{formatCurrency(p.commissionable)}</div>
                                 <div className={`w-16 text-right text-[10px] px-1.5 py-0.5 rounded font-medium ${
-                                  inclRate >= 90 ? "bg-v-teal/10 text-v-teal"
+                                  p.mrr === 0 ? "bg-secondary text-muted-foreground"
+                                  : inclRate >= 90 ? "bg-v-teal/10 text-v-teal"
                                   : inclRate >= 40 ? "bg-v-amber/10 text-v-amber"
                                   : "bg-v-red/10 text-v-red"
                                 }`}>
-                                  {inclRate}%
+                                  {p.mrr > 0 ? `${inclRate}%` : "free"}
                                 </div>
                               </div>
                             );

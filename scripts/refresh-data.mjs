@@ -180,31 +180,60 @@ for (const a of AMS) {
 // joined to dim_current_product for the authoritative inclusion_rate (comp-plan
 // rate; 100% populated on billing rows) and inclusion_category. Quantity = the
 // number of distinct customers (SMBs) with that SKU under the partner.
+//
+// Two passes: (1) last FULL month is the $ basis (complete, reconciles to book);
+// (2) current month catches newly-adopted / free-tier products (e.g. Vibe Beta
+// at $0) that the full month didn't have yet — appended so adoption shows up
+// immediately. Current-month $ is partial (mid-month) so it's only used for
+// products the full month is missing.
+function productQuery(dateStr, having) {
+  return bq(`
+    SELECT p.vmf_account_group_id AS agid,
+           pr.name AS sku,
+           COALESCE(NULLIF(pr.inclusion_category, 'Unknown'), 'Other') AS category,
+           COUNT(DISTINCT s.customer_snk) AS qty,
+           ROUND(SUM(s.total_reporting), 2) AS mrr,
+           ROUND(SUM(s.total_reporting * COALESCE(pr.inclusion_rate, 0)), 2) AS commissionable
+    FROM \`${PROJECT}.management.f_billing_partner_customer_product_snpm\` s
+    JOIN \`${PROJECT}.management.dim_date\` d ON s.projected_month_date_sk = d.date_sk
+    JOIN \`${PROJECT}.management.dim_current_partner\` p ON s.partner_snk = p.partner_snk
+    JOIN \`${PROJECT}.management.dim_current_user\` u ON s.assigned_sales_person_snk = u.user_snk
+    JOIN \`${PROJECT}.management.dim_current_product\` pr ON s.product_snk = pr.product_snk
+    WHERE u.work_email IN (${EMAILS_SQL}) AND d.date = '${dateStr}'
+    GROUP BY 1, 2, 3 HAVING ${having}
+    ORDER BY agid, mrr DESC`);
+}
 console.log("Pulling product breakdown (last full month) per partner…");
-const productRows = bq(`
-  SELECT p.vmf_account_group_id AS agid,
-         pr.name AS sku,
-         COALESCE(NULLIF(pr.inclusion_category, 'Unknown'), 'Other') AS category,
-         COUNT(DISTINCT s.customer_snk) AS qty,
-         ROUND(SUM(s.total_reporting), 2) AS mrr,
-         ROUND(SUM(s.total_reporting * COALESCE(pr.inclusion_rate, 0)), 2) AS commissionable
-  FROM \`${PROJECT}.management.f_billing_partner_customer_product_snpm\` s
-  JOIN \`${PROJECT}.management.dim_date\` d ON s.projected_month_date_sk = d.date_sk
-  JOIN \`${PROJECT}.management.dim_current_partner\` p ON s.partner_snk = p.partner_snk
-  JOIN \`${PROJECT}.management.dim_current_user\` u ON s.assigned_sales_person_snk = u.user_snk
-  JOIN \`${PROJECT}.management.dim_current_product\` pr ON s.product_snk = pr.product_snk
-  WHERE u.work_email IN (${EMAILS_SQL}) AND d.date = '${lastFullMonthStart}'
-  GROUP BY 1, 2, 3 HAVING mrr > 0
-  ORDER BY agid, mrr DESC`);
 const productsByAgid = {};
-for (const r of productRows) {
+for (const r of productQuery(lastFullMonthStart, "mrr > 0")) {
   if (!r.agid) continue;
   (productsByAgid[r.agid] ??= []).push({
     name: String(r.sku).trim(), category: r.category,
     mrr: Number(r.mrr), commissionable: Number(r.commissionable), quantity: Number(r.qty),
   });
 }
-console.log(`product breakdown: ${Object.keys(productsByAgid).length} partners`);
+// Append current-month AI/Vibe products the full month didn't have, so newly-
+// adopted or free-tier AI products (e.g. Vibe Beta) show up immediately for
+// adoption tracking. Limited to AI products to avoid pulling in $0 bundled
+// noise — non-AI products still come from the complete last-full-month basis.
+const isAIish = (name) => /\bai\b/i.test(name) || /\bvibe\b/i.test(name);
+console.log("Pulling current-month AI/Vibe subscriptions (catches new/free, e.g. Vibe)…");
+let appended = 0;
+for (const r of productQuery(currentMonthStart, "COUNT(DISTINCT s.customer_snk) > 0")) {
+  if (!r.agid) continue;
+  const name = String(r.sku).trim();
+  if (!isAIish(name)) continue;
+  const list = (productsByAgid[r.agid] ??= []);
+  if (!list.some(p => p.name === name)) {
+    list.push({
+      name, category: r.category,
+      mrr: Number(r.mrr), commissionable: Number(r.commissionable), quantity: Number(r.qty),
+    });
+    appended++;
+  }
+}
+for (const list of Object.values(productsByAgid)) list.sort((a, b) => b.mrr - a.mrr);
+console.log(`product breakdown: ${Object.keys(productsByAgid).length} partners (+${appended} current-month-only SKUs)`);
 
 const lastFullMonthEnd = iso(new Date(today.getFullYear(), today.getMonth(), 0));
 console.log("Pulling invoices + credit notes (last full month)…");

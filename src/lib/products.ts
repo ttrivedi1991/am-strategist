@@ -12,9 +12,10 @@ export function isAIProduct(name: string): boolean {
   return /\bai\b/.test(n) || /\bvibe\b/.test(n);
 }
 
-// An account's active AI products, from live billing (mrr > 0).
+// An account's active AI products. Active = billing OR has subscribers
+// (quantity > 0), so free/beta tiers like Vibe (Beta) Pro at $0 still count.
 export function aiProductsOf(a: Account) {
-  return a.productBreakdown.filter(p => p.mrr > 0 && isAIProduct(p.name));
+  return a.productBreakdown.filter(p => isAIProduct(p.name) && (p.mrr > 0 || (p.quantity ?? 0) > 0));
 }
 
 export function hasAI(a: Account): boolean {
