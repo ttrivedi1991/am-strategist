@@ -340,56 +340,46 @@ export default function Accounts() {
                               </div>
                             </div>
 
-                            {/* Invoices */}
+                            {/* Invoices — number + amount only (issue month is the section header) */}
                             {docs.topInvoices.length > 0 && (
                               <div>
                                 <div className="flex items-center px-4 py-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground bg-secondary/20">
                                   <span className="flex-1">Invoice #</span>
-                                  <span className="w-24">Date</span>
-                                  <span className="w-16 text-right">Lines</span>
-                                  <span className="w-24 text-right">Amount</span>
+                                  <span className="w-28 text-right">Amount</span>
                                 </div>
                                 <div className="divide-y divide-border">
                                   {docs.topInvoices.map(inv => (
                                     <div key={inv.id} className="flex items-center px-4 py-2 text-xs">
-                                      <span className="flex-1 font-mono font-medium text-foreground">{inv.id}</span>
-                                      <span className="w-24 text-muted-foreground tnum">{inv.date}</span>
-                                      <span className="w-16 text-right text-muted-foreground tnum">{inv.lineCount}</span>
-                                      <span className="w-24 text-right font-semibold tnum">{formatCurrency(inv.amount)}</span>
+                                      <span className="flex-1 font-mono font-medium text-foreground truncate">{inv.id}</span>
+                                      <span className="w-28 text-right font-semibold tnum">{formatCurrency(inv.amount)}</span>
                                     </div>
                                   ))}
                                 </div>
                                 {docs.invoiceCount > docs.topInvoices.length && (
                                   <div className="px-4 py-1.5 text-[10px] text-muted-foreground border-t border-border">
-                                    + {docs.invoiceCount - docs.topInvoices.length} smaller invoice{docs.invoiceCount - docs.topInvoices.length !== 1 ? "s" : ""} (top {docs.topInvoices.length} shown)
+                                    + {docs.invoiceCount - docs.topInvoices.length} more invoice{docs.invoiceCount - docs.topInvoices.length !== 1 ? "s" : ""} (top {docs.topInvoices.length} shown)
                                   </div>
                                 )}
                               </div>
                             )}
 
-                            {/* Credit notes */}
+                            {/* Credit notes — number + amount only */}
                             {docs.creditNotes.length > 0 && (
                               <div className="border-t border-v-red/20 bg-v-red/[0.03]">
                                 <div className="flex items-center px-4 py-1.5 text-[10px] font-medium uppercase tracking-wide text-v-red/80">
                                   <span className="flex-1">Credit Note #</span>
-                                  <span className="w-24">Date</span>
-                                  <span className="w-24 text-right">Amount</span>
+                                  <span className="w-28 text-right">Amount</span>
                                 </div>
                                 <div className="divide-y divide-v-red/10">
                                   {docs.creditNotes.map(cn => (
                                     <div key={cn.id} className="flex items-center px-4 py-2 text-xs">
-                                      <span className="flex-1 font-mono font-medium text-v-red">{cn.id}</span>
-                                      <span className="w-24 text-muted-foreground tnum">{cn.date}</span>
-                                      <span className="w-24 text-right font-semibold text-v-red tnum">−{formatCurrency(Math.abs(cn.amount))}</span>
+                                      <span className="flex-1 font-mono font-medium text-v-red truncate">{cn.id}</span>
+                                      <span className="w-28 text-right font-semibold text-v-red tnum">−{formatCurrency(Math.abs(cn.amount))}</span>
                                     </div>
                                   ))}
                                 </div>
                               </div>
                             )}
-
-                            <div className="px-4 py-1.5 text-[10px] text-muted-foreground border-t border-border">
-                              Source: BigQuery · f_billing_tx
-                            </div>
                           </div>
                         ))}
                     </div>
