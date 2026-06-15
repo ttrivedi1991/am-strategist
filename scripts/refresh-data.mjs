@@ -191,7 +191,11 @@ function productQuery(dateStr, having) {
     SELECT p.vmf_account_group_id AS agid,
            pr.name AS sku,
            COALESCE(NULLIF(pr.inclusion_category, 'Unknown'), 'Other') AS category,
-           COUNT(DISTINCT s.customer_snk) AS qty,
+           -- Quantity = active billed units (num_transactions), which matches the
+           -- Partner Center "Billing & Payments" counts within ~1% (timing). Falls
+           -- back to distinct customers for free tiers that don't bill a unit.
+           CAST(ROUND(SUM(s.num_transactions)) AS INT64) AS units,
+           COUNT(DISTINCT s.customer_snk) AS customers,
            ROUND(SUM(s.total_reporting), 2) AS mrr,
            ROUND(SUM(s.total_reporting * COALESCE(pr.inclusion_rate, 0)), 2) AS commissionable
     FROM \`${PROJECT}.management.f_billing_partner_customer_product_snpm\` s
@@ -209,7 +213,8 @@ for (const r of productQuery(lastFullMonthStart, "mrr > 0")) {
   if (!r.agid) continue;
   (productsByAgid[r.agid] ??= []).push({
     name: String(r.sku).trim(), category: r.category,
-    mrr: Number(r.mrr), commissionable: Number(r.commissionable), quantity: Number(r.qty),
+    mrr: Number(r.mrr), commissionable: Number(r.commissionable),
+    quantity: Number(r.units) > 0 ? Number(r.units) : Number(r.customers),
   });
 }
 // Append current-month AI/Vibe products the full month didn't have, so newly-
@@ -227,7 +232,8 @@ for (const r of productQuery(currentMonthStart, "COUNT(DISTINCT s.customer_snk) 
   if (!list.some(p => p.name === name)) {
     list.push({
       name, category: r.category,
-      mrr: Number(r.mrr), commissionable: Number(r.commissionable), quantity: Number(r.qty),
+      mrr: Number(r.mrr), commissionable: Number(r.commissionable),
+      quantity: Number(r.units) > 0 ? Number(r.units) : Number(r.customers),
     });
     appended++;
   }
