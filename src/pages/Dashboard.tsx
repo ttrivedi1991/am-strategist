@@ -78,7 +78,7 @@ export default function Dashboard() {
       <div className="p-6 space-y-6">
         {/* Book Health Warning */}
         {revenueChange < 0 ? (
-          <div className="flex items-start gap-3 p-4 rounded-xl bg-v-red/5 border border-v-red/20">
+          <div className="flex items-start gap-3 p-4 rounded-2xl bg-v-red/5 border border-v-red/20">
             <TrendingDown className="w-4 h-4 text-v-red mt-0.5 shrink-0" />
             <div>
               <p className="text-sm font-semibold text-foreground">
@@ -91,7 +91,7 @@ export default function Dashboard() {
             </div>
           </div>
         ) : (
-          <div className="flex items-start gap-3 p-4 rounded-xl bg-v-teal/5 border border-v-teal/20">
+          <div className="flex items-start gap-3 p-4 rounded-2xl bg-v-teal/5 border border-v-teal/20">
             <TrendingUp className="w-4 h-4 text-v-teal mt-0.5 shrink-0" />
             <div>
               <p className="text-sm font-semibold text-foreground">

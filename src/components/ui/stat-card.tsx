@@ -21,25 +21,25 @@ export function StatCard({ label, value, change, changeLabel, icon: Icon, iconCo
   return (
     <div
       className={cn(
-        "rounded-xl border border-border bg-card p-5 flex flex-col gap-3 transition-all",
-        onClick && "cursor-pointer hover:shadow-md hover:border-primary/30",
+        "group rounded-2xl border border-border/70 bg-card p-5 flex flex-col gap-4 shadow-sm transition-all duration-200",
+        onClick && "cursor-pointer hover:shadow-md hover:-translate-y-0.5 hover:border-border",
         className,
       )}
       onClick={onClick}
     >
       <div className="flex items-start justify-between">
-        <p className="text-xs font-medium text-muted-foreground">{label}</p>
-        <div className={cn("w-8 h-8 rounded-lg bg-secondary flex items-center justify-center", iconColor)}>
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
+        <div className={cn("w-9 h-9 rounded-xl bg-secondary/70 flex items-center justify-center transition-colors group-hover:bg-secondary", iconColor)}>
           <Icon className="w-4 h-4" />
         </div>
       </div>
       <div>
-        <p className="text-2xl font-bold text-foreground tracking-tight">{value}</p>
+        <p className="text-[28px] leading-none font-semibold text-foreground tracking-tight tnum">{value}</p>
         {(change !== undefined || changeLabel) && (
-          <div className="flex items-center gap-1 mt-1">
-            {isPositive && <TrendingUp className="w-3 h-3 text-v-green" />}
-            {isNegative && <TrendingDown className="w-3 h-3 text-v-red" />}
-            {!isPositive && !isNegative && <Minus className="w-3 h-3 text-muted-foreground" />}
+          <div className="flex items-center gap-1.5 mt-2.5">
+            {isPositive && <TrendingUp className="w-3.5 h-3.5 text-v-green" />}
+            {isNegative && <TrendingDown className="w-3.5 h-3.5 text-v-red" />}
+            {!isPositive && !isNegative && <Minus className="w-3.5 h-3.5 text-muted-foreground" />}
             <span className={cn("text-xs font-medium", isPositive ? "text-v-green" : isNegative ? "text-v-red" : "text-muted-foreground")}>
               {change !== undefined ? `${change > 0 ? "+" : ""}${change}%` : ""} {changeLabel}
             </span>
