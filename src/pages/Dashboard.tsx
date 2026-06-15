@@ -106,9 +106,11 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Month focus filter */}
+        {/* Month focus filter — scopes only the monthly cards (billings & commissionable) */}
         <div className="flex items-center justify-end gap-2 -mb-3">
-          <span className="text-xs text-muted-foreground">Focus month</span>
+          <span className="text-xs text-muted-foreground">
+            Focus month <span className="hidden sm:inline text-muted-foreground/70">· changes Billings &amp; Commissionable (WAMGR is quarterly)</span>
+          </span>
           <select
             value={focusMonth}
             onChange={e => setFocusMonth(e.target.value)}
@@ -156,7 +158,7 @@ export default function Dashboard() {
             <CardContent className="p-4">
               <div className="flex items-center gap-2 mb-1">
                 <AlertTriangle className="w-3.5 h-3.5 text-v-amber" />
-                <p className="text-xs font-medium text-muted-foreground">Gap to Next Tier</p>
+                <p className="text-xs font-medium text-muted-foreground">Gap to Next Tier (Q2)</p>
               </div>
               <p className="text-2xl font-bold text-v-amber">{nextTier ? formatCurrency(outlook.gapToNextTier) : "At max"}</p>
               <p className="text-[10px] text-muted-foreground mt-1">
