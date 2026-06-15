@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { Account } from "@/data/types";
+import { aiProductsOf, hasAI } from "@/lib/products";
 import { useNavigate } from "react-router-dom";
 import { useAM } from "@/context/AMContext";
 import { formatCurrency, commissionableMRR } from "@/lib/utils";
@@ -21,14 +22,15 @@ export default function AIAdoption() {
 
   const trendData = aiAdoption[selectedAM.id] ?? [];
 
-  const withAI = accounts.filter(a => a.aiAdoption !== "none");
-  const noAI = accounts.filter(a => a.aiAdoption === "none");
+  // AI adoption is derived from LIVE billing (productBreakdown) via a name-based
+  // matcher — incl. Vibe — not the old hand-set products[]/aiAdoption fields.
+  const withAI = accounts.filter(hasAI);
+  const noAI = accounts.filter(a => !hasAI(a));
   const adoptionRate = accounts.length > 0 ? Math.round((withAI.length / accounts.length) * 100) : 0;
 
   // AI product dollars: billings + commissionable for the account's active AI products only.
-  // AI products are Category 1 in the commission plan — 95% inclusion, the highest tier.
   function aiDollars(a: Account) {
-    const ai = a.productBreakdown.filter(p => p.mrr > 0 && a.products.includes(p.name));
+    const ai = aiProductsOf(a);
     return {
       billings: ai.reduce((s, p) => s + p.mrr, 0),
       commissionable: ai.reduce((s, p) => s + p.commissionable, 0),
@@ -36,8 +38,8 @@ export default function AIAdoption() {
   }
   const totalAIComm = withAI.reduce((s, a) => s + aiDollars(a).commissionable, 0);
 
-  // Total AI products in use
-  const allProducts = withAI.flatMap(a => a.products);
+  // Top AI products in use (by # of partners), from live billing
+  const allProducts = withAI.flatMap(a => aiProductsOf(a).map(p => p.name));
   const productFreq = allProducts.reduce((acc, p) => {
     acc[p] = (acc[p] || 0) + 1;
     return acc;
@@ -65,7 +67,7 @@ export default function AIAdoption() {
             { key: "ai" as const, label: "Partners with AI", value: withAI.length, sub: `${adoptionRate}% of book`, color: "text-v-blue", ring: "ring-v-blue/30" },
             { key: "noai" as const, label: "No Active AI", value: noAI.filter(a => a.mrr > 0).length, sub: "expansion targets", color: "text-foreground", ring: "ring-border" },
             { key: "all" as const, label: "AI Commissionable $", value: formatCurrency(totalAIComm), sub: "95% inclusion · Category 1", color: "text-v-teal", ring: "ring-v-teal/30" },
-            { key: "multi" as const, label: "Multi-product", value: withAI.filter(a => a.products.length > 1).length, sub: "partners with 2+ AI", color: "text-v-purple", ring: "ring-v-purple/30" },
+            { key: "multi" as const, label: "Multi-product", value: withAI.filter(a => aiProductsOf(a).length > 1).length, sub: "partners with 2+ AI", color: "text-v-purple", ring: "ring-v-purple/30" },
           ].map(card => (
             <button
               key={card.key}
@@ -177,7 +179,7 @@ export default function AIAdoption() {
           </CardHeader>
           <CardContent className="space-y-2">
             {withAI
-              .filter(a => activeFilter === "multi" ? a.products.length > 1 : true)
+              .filter(a => activeFilter === "multi" ? aiProductsOf(a).length > 1 : true)
               .sort((a, b) => aiDollars(b).commissionable - aiDollars(a).commissionable)
               .map(account => (
                 <div
@@ -192,8 +194,8 @@ export default function AIAdoption() {
                       <span className="text-[10px] font-semibold text-v-teal">{formatCurrency(aiDollars(account).commissionable)}/mo AI commissionable</span>
                     </div>
                     <div className="flex flex-wrap gap-1 mt-1.5">
-                      {account.products.map(p => (
-                        <span key={p} className="text-[10px] px-1.5 py-0.5 rounded bg-v-blue/10 text-v-blue font-medium">{p}</span>
+                      {aiProductsOf(account).map(p => (
+                        <span key={p.name} className="text-[10px] px-1.5 py-0.5 rounded bg-v-blue/10 text-v-blue font-medium">{p.name}</span>
                       ))}
                     </div>
 
