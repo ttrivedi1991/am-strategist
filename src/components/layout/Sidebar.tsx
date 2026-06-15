@@ -9,7 +9,7 @@ import {
 const NAV = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/accounts", icon: Users, label: "Accounts" },
-  { to: "/commission", icon: TrendingUp, label: "Commission" },
+  { to: "/commission", icon: TrendingUp, label: "Commission", amOnly: true },
   { to: "/ai-adoption", icon: BrainCircuit, label: "AI Adoption" },
   { to: "/intel", icon: Bell, label: "Org Intelligence" },
   { to: "/outreach", icon: Send, label: "Outreach Planner" },
@@ -24,7 +24,8 @@ const AVATAR_COLORS: Record<string, string> = {
 };
 
 export function Sidebar() {
-  const { selectedAM, setSelectedAM, logout, roster } = useAM();
+  const { selectedAM, setSelectedAM, logout, roster, role } = useAM();
+  const nav = NAV.filter(item => !item.amOnly || role === "am");
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
 
@@ -48,7 +49,7 @@ export function Sidebar() {
 
       {/* Nav */}
       <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto scrollbar-thin">
-        {NAV.map(({ to, icon: Icon, label }) => (
+        {nav.map(({ to, icon: Icon, label }) => (
           <NavLink
             key={to}
             to={to}

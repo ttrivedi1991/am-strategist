@@ -110,10 +110,15 @@ export function mtdCommissionable(accounts: Account[]): number {
   return accounts.reduce((s, a) => s + (a.mtdBilling?.mrr ?? 0) * blendedRate(a), 0);
 }
 
+// Per-AM in-month pace object (for display: spanDays, priorMonthLabel, etc.).
+export function getMtdPace(amId: string) {
+  return getLiveMeta().mtdPaceByAm?.[amId];
+}
+
 // In-month pace: invoiced dollars this month vs the same day-span last month.
-// 1.0 = tracking exactly at last month's level.
-export function mtdPaceFactor(): number {
-  const p = getLiveMeta().mtdPace;
+// 1.0 = tracking exactly at last month's level. Per AM.
+export function mtdPaceFactor(amId: string): number {
+  const p = getMtdPace(amId);
   return p && p.priorSameSpan > 0 ? p.current / p.priorSameSpan : 1;
 }
 
@@ -131,12 +136,12 @@ export interface Q2Outlook {
   paceFactor: number;
 }
 
-export function computeQ2Outlook(accounts: Account[]): Q2Outlook {
+export function computeQ2Outlook(accounts: Account[], amId: string): Q2Outlook {
   const eligible = q2EligiblePartners(accounts);
   const marComm = monthlyCommissionable(eligible, "Mar 26");
   const aprComm = monthlyCommissionable(eligible, "Apr 26");
   const mayComm = monthlyCommissionable(eligible, "May 26");
-  const paceFactor = mtdPaceFactor();
+  const paceFactor = mtdPaceFactor(amId);
   // June anchored on May with the one-time Telkom credit reversed — projecting
   // from the credit-depressed raw May would understate June (the HOS dashboard
   // projects June above May for the same reason).

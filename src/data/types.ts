@@ -99,8 +99,11 @@ export interface LiveMeta {
   generatedAt: string;
   dataThrough: string;
   mtdLabel: string;
-  mtdPace: { spanDays: number; current: number; priorSameSpan: number; priorMonthLabel: string };
+  // In-month pace keyed by roster AM id, so each AM's projection uses their own.
+  mtdPaceByAm: Record<string, { spanDays: number; current: number; priorSameSpan: number; priorMonthLabel: string }>;
 }
+
+export type MtdPace = LiveMeta["mtdPaceByAm"][string];
 
 export type AIAdoptionData = Record<string, { month: string; withAI: number; noAI: number }[]>;
 

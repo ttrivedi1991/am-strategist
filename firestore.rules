@@ -6,20 +6,31 @@ service cloud.firestore {
     // project. Firebase Auth is project-scoped, not database-scoped, so any ID
     // token minted anywhere in the project satisfies `request.auth != null`.
     // This database holds real partner billing/commission data, so access is
-    // restricted to an explicit allowlist of verified AM emails — never the
+    // restricted to an explicit allowlist of verified emails — never the
     // project-wide `request.auth != null` default.
-    function isAuthorizedAM() {
-      return request.auth != null
-        && request.auth.token.email_verified == true
-        && request.auth.token.email in [
-          'ttrivedi@vendasta.com',  // Tanmay Trivedi
-          'dkupietz@vendasta.com',  // Desiree Kupietz
-          'astark@vendasta.com'     // Adam Stark
-        ];
+    function isVerified() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+    // Account Managers — full dashboard incl. Commission page.
+    function isAM() {
+      return isVerified() && request.auth.token.email in [
+        'ttrivedi@vendasta.com',  // Tanmay Trivedi
+        'dkupietz@vendasta.com',  // Desiree Kupietz
+        'astark@vendasta.com'     // Adam Stark
+      ];
+    }
+    // Read-only viewers (e.g. technical CSM) — dashboard access only.
+    function isViewer() {
+      return isVerified() && request.auth.token.email in [
+        'blang@vendasta.com'      // Brady Lang (Technical CSM)
+      ];
     }
 
     match /{document=**} {
-      allow read, write: if isAuthorizedAM();
+      allow read: if isAM() || isViewer();
+      // Clients never write — data is seeded server-side via the Admin SDK
+      // (gcloud ADC), which bypasses these rules. Block all client writes.
+      allow write: if false;
     }
   }
 }

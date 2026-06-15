@@ -37,8 +37,9 @@ export default function Dashboard() {
 
   // Commission outlook (Q2 2026) — shared math in src/lib/commission.ts:
   // one-time billing artifacts normalized for the projection; June at in-month pace.
-  const outlook = computeQ2Outlook(accounts);
+  const outlook = computeQ2Outlook(accounts, selectedAM.id);
   const { wamgrToDate, wamgrProjected, tier: currentTier, nextTier, paceFactor } = outlook;
+  const pace = LIVE_META.mtdPaceByAm[selectedAM.id]; // per-AM pace for display
 
   // QoQ: compare current month to the prior-quarter close (Mar 2026 for Q2)
   const totalMRRQoQBase = accounts.reduce((s, a) => s + getQoQBaseMRR(a.revenueHistory), 0);
@@ -86,7 +87,7 @@ export default function Dashboard() {
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Source: f_billing_partner_snpm · {latestMonthLabel} actuals vs {QOQ_BASELINE_LABEL} close (prior-quarter baseline per commission plan) · excluding one-time billing credits: {adjRevenueChange >= 0 ? "+" : ""}{adjRevenueChange.toFixed(1)}% QoQ
-                {mtdTotal > 0 && <> · <span className="font-medium text-foreground">{formatMonthLabel(LIVE_META.mtdLabel)} month-to-date: {formatCurrency(mtdTotal)}</span> through {LIVE_META.dataThrough} · pacing {pacePct >= 0 ? "+" : ""}{pacePct.toFixed(1)}% vs same span of {formatMonthLabel(LIVE_META.mtdPace.priorMonthLabel)}</>}
+                {mtdTotal > 0 && <> · <span className="font-medium text-foreground">{formatMonthLabel(LIVE_META.mtdLabel)} month-to-date: {formatCurrency(mtdTotal)}</span> through {LIVE_META.dataThrough} · pacing {pacePct >= 0 ? "+" : ""}{pacePct.toFixed(1)}% vs same span of {formatMonthLabel(pace.priorMonthLabel)}</>}
               </p>
             </div>
           </div>
@@ -99,7 +100,7 @@ export default function Dashboard() {
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Source: f_billing_partner_snpm · {latestMonthLabel} actuals vs {QOQ_BASELINE_LABEL} close (prior-quarter baseline per commission plan) · excluding one-time billing credits: {adjRevenueChange >= 0 ? "+" : ""}{adjRevenueChange.toFixed(1)}% QoQ
-                {mtdTotal > 0 && <> · <span className="font-medium text-foreground">{formatMonthLabel(LIVE_META.mtdLabel)} month-to-date: {formatCurrency(mtdTotal)}</span> through {LIVE_META.dataThrough} · pacing {pacePct >= 0 ? "+" : ""}{pacePct.toFixed(1)}% vs same span of {formatMonthLabel(LIVE_META.mtdPace.priorMonthLabel)}</>}
+                {mtdTotal > 0 && <> · <span className="font-medium text-foreground">{formatMonthLabel(LIVE_META.mtdLabel)} month-to-date: {formatCurrency(mtdTotal)}</span> through {LIVE_META.dataThrough} · pacing {pacePct >= 0 ? "+" : ""}{pacePct.toFixed(1)}% vs same span of {formatMonthLabel(pace.priorMonthLabel)}</>}
               </p>
             </div>
           </div>
@@ -137,7 +138,7 @@ export default function Dashboard() {
             value={formatCurrency(focusBillings)}
             change={focusChange}
             changeLabel={focusIsMTD
-              ? `Through ${LIVE_META.dataThrough} · pacing ${pacePct >= 0 ? "+" : ""}${pacePct.toFixed(1)}% vs same span of ${formatMonthLabel(LIVE_META.mtdPace.priorMonthLabel)}`
+              ? `Through ${LIVE_META.dataThrough} · pacing ${pacePct >= 0 ? "+" : ""}${pacePct.toFixed(1)}% vs same span of ${formatMonthLabel(pace.priorMonthLabel)}`
               : `vs ${QOQ_BASELINE_LABEL} close (QoQ)`}
             icon={DollarSign}
             iconColor="text-v-blue"

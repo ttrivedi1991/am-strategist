@@ -27,6 +27,13 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+// Commission is AM-only — viewers (e.g. technical CSM) are redirected to the dashboard.
+function AMOnlyRoute({ children }: { children: React.ReactNode }) {
+  const { role } = useAM();
+  if (role !== "am") return <Navigate to="/" replace />;
+  return <>{children}</>;
+}
+
 export default function App() {
   return (
     <AMProvider>
@@ -48,7 +55,7 @@ export default function App() {
           <Route path="outreach" element={<OutreachPlanner />} />
           <Route path="mia" element={<MIARecovery />} />
           <Route path="brief" element={<WeeklyBrief />} />
-          <Route path="commission" element={<Commission />} />
+          <Route path="commission" element={<AMOnlyRoute><Commission /></AMOnlyRoute>} />
         </Route>
       </Routes>
     </BrowserRouter>

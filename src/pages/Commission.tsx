@@ -51,13 +51,14 @@ function getNextRetentionTier(pct: number) {
 export default function Commission() {
   const navigate = useNavigate();
   const am = useAM();
-  const { accounts } = am;
+  const { accounts, selectedAM } = am;
   // Non-null: pages render only after AMContext finishes loading (ProtectedRoute gate).
   const LIVE_META = am.liveMeta!;
+  const pace = LIVE_META.mtdPaceByAm[selectedAM.id]; // per-AM pace for display
 
   // Shared commission math (src/lib/commission.ts): official raw billings,
   // June projected from a credit-free May base at the current in-month pace.
-  const outlook = computeQ2Outlook(accounts);
+  const outlook = computeQ2Outlook(accounts, selectedAM.id);
   const {
     marComm, aprComm, mayComm, junCommEst,
     wamgrToDate, wamgrProjected, tier: currentTier, nextTier,
@@ -214,7 +215,7 @@ export default function Commission() {
               {formatMonthLabel(LIVE_META.mtdLabel)} so far: {formatCurrency(mtdComm)} commissionable ({formatCurrency(mtdBillings)} billings) through {LIVE_META.dataThrough}
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Pacing {pacePct >= 0 ? "+" : ""}{pacePct.toFixed(1)}% vs the same {LIVE_META.mtdPace.spanDays} days of {formatMonthLabel(LIVE_META.mtdPace.priorMonthLabel)} (invoiced $, credits excluded) ·
+              Pacing {pacePct >= 0 ? "+" : ""}{pacePct.toFixed(1)}% vs the same {pace.spanDays} days of {formatMonthLabel(pace.priorMonthLabel)} (invoiced $, credits excluded) ·
               June projected at this pace: <span className="font-medium text-foreground">{formatCurrency(junCommEst)}</span> commissionable
             </p>
           </div>

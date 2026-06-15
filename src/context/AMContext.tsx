@@ -14,6 +14,9 @@ interface AMContextValue {
   authError: string | null;
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
+  // role: "am" = an Account Manager (full access incl. Commission);
+  // "csm" = read-only viewer (e.g. Brady) — Commission page hidden.
+  role: "am" | "csm";
   // data (valid once loading === false and authError === null)
   selectedAM: AMProfile;
   setSelectedAM: (am: AMProfile) => void;
@@ -99,6 +102,11 @@ export function AMProvider({ children }: { children: ReactNode }) {
   }
 
   const roster = data?.roster ?? [];
+  // Role: a roster member (matched by email) is an AM; any other authorized
+  // signed-in user (read-allowed by firestore.rules, e.g. a technical CSM) is a
+  // read-only viewer who shouldn't see the Commission page.
+  const isRosterAM = roster.some(a => a.email.toLowerCase() === user?.email?.toLowerCase());
+  const role: "am" | "csm" = isRosterAM ? "am" : "csm";
   const defaultId = roster.find(a => a.email.toLowerCase() === user?.email?.toLowerCase())?.id
     ?? roster[0]?.id ?? "";
   const activeId = roster.some(a => a.id === selectedId) ? selectedId : defaultId;
@@ -116,7 +124,7 @@ export function AMProvider({ children }: { children: ReactNode }) {
 
   return (
     <AMContext.Provider value={{
-      user, loading, authError, loginWithGoogle, logout,
+      user, loading, authError, loginWithGoogle, logout, role,
       selectedAM: liveAM, setSelectedAM, roster,
       accounts, orgAlerts,
       liveMeta: data?.liveMeta ?? null,
