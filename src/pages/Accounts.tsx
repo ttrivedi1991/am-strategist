@@ -340,30 +340,11 @@ export default function Accounts() {
                               </div>
                             </div>
 
-                            {/* Invoices — number + amount only (issue month is the section header) */}
-                            {docs.topInvoices.length > 0 && (
-                              <div>
-                                <div className="flex items-center px-4 py-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground bg-secondary/20">
-                                  <span className="flex-1">Invoice #</span>
-                                  <span className="w-28 text-right">Amount</span>
-                                </div>
-                                <div className="divide-y divide-border">
-                                  {docs.topInvoices.map(inv => (
-                                    <div key={inv.id} className="flex items-center px-4 py-2 text-xs">
-                                      <span className="flex-1 font-mono font-medium text-foreground truncate">{inv.id}</span>
-                                      <span className="w-28 text-right font-semibold tnum">{formatCurrency(inv.amount)}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                                {docs.invoiceCount > docs.topInvoices.length && (
-                                  <div className="px-4 py-1.5 text-[10px] text-muted-foreground border-t border-border">
-                                    + {docs.invoiceCount - docs.topInvoices.length} more invoice{docs.invoiceCount - docs.topInvoices.length !== 1 ? "s" : ""} (top {docs.topInvoices.length} shown)
-                                  </div>
-                                )}
-                              </div>
-                            )}
+                            {/* Per-invoice rows intentionally omitted — the warehouse invoice id is
+                                an internal hash for aggregated invoices (no customer-facing SIN#).
+                                The monthly summary above is the useful invoice view. */}
 
-                            {/* Credit notes — number + amount only */}
+                            {/* Credit notes — number + amount only (real CM# numbers) */}
                             {docs.creditNotes.length > 0 && (
                               <div className="border-t border-v-red/20 bg-v-red/[0.03]">
                                 <div className="flex items-center px-4 py-1.5 text-[10px] font-medium uppercase tracking-wide text-v-red/80">
