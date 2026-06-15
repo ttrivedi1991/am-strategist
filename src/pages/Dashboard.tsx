@@ -123,18 +123,7 @@ export default function Dashboard() {
         </div>
 
         {/* Commission KPIs */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard
-            label="WAMGR (Q2 projected)"
-            value={`${(wamgrProjected * 100).toFixed(2)}%`}
-            changeLabel={wamgrProjected < 0
-              ? `To date: ${(wamgrToDate * 100).toFixed(2)}% · negative growth → 0% payout`
-              : `To date: ${(wamgrToDate * 100).toFixed(2)}% · at ${currentTier.label} tier → ${(currentTier.rate * 100).toFixed(2)}% of book`}
-            icon={TrendingUp}
-            iconColor={wamgrProjected >= 0.01 ? "text-v-green" : wamgrProjected >= 0 ? "text-v-amber" : "text-v-red"}
-            trend={wamgrProjected >= 0.01 ? "up" : "down"}
-            onClick={() => navigate("/commission")}
-          />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <StatCard
             label={`Total Billings (${focusLabel})`}
             value={formatCurrency(focusBillings)}
