@@ -43,7 +43,7 @@ export interface Account {
   lastMeeting: string;
   lastActivity: string;
   products: string[];
-  productBreakdown: Array<{ name: string; category: string; mrr: number; commissionable: number }>;
+  productBreakdown: Array<{ name: string; category: string; mrr: number; commissionable: number; quantity?: number }>;
   website: string;
   notes: string;
   isMIA: boolean;
@@ -99,6 +99,7 @@ export interface LiveMeta {
   generatedAt: string;
   dataThrough: string;
   mtdLabel: string;
+  productMonth: string; // month the product breakdown reflects (last full month)
   // In-month pace keyed by roster AM id, so each AM's projection uses their own.
   mtdPaceByAm: Record<string, { spanDays: number; current: number; priorSameSpan: number; priorMonthLabel: string }>;
 }

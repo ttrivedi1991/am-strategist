@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { type Account } from "@/data/types";
-import { formatCurrency, daysSince, pctChange, getQoQBaseMRR, getLatestMRR } from "@/lib/utils";
+import { formatCurrency, formatMonthLabel, daysSince, pctChange, getQoQBaseMRR, getLatestMRR } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { useAM } from "@/context/AMContext";
 import {
@@ -25,7 +25,8 @@ const healthBadge: Record<Account["health"], { variant: "success" | "warning" | 
 
 export default function Accounts() {
   const navigate = useNavigate();
-  const { accounts, billingDocs: BILLING_DOCS, billingDocsMtd: BILLING_DOCS_MTD } = useAM();
+  const { accounts, billingDocs: BILLING_DOCS, billingDocsMtd: BILLING_DOCS_MTD, liveMeta } = useAM();
+  const productMonth = liveMeta?.productMonth ? formatMonthLabel(liveMeta.productMonth) : "latest month";
   const [search, setSearch] = useState("");
   const [filterHealth, setFilterHealth] = useState("all");
   const [filterVertical, setFilterVertical] = useState("all");
@@ -263,13 +264,14 @@ export default function Accounts() {
                     return (
                     <div className="mt-3 ml-12 rounded-xl border border-border bg-secondary/30 overflow-hidden">
                       <div className="px-4 py-2 border-b border-border bg-secondary/50 flex items-center justify-between">
-                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Product Billing Breakdown — May 2026</p>
-                        <span className="text-[10px] text-muted-foreground">BigQuery · f_billing_partner_snpm</span>
+                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Product Billing Breakdown — {productMonth}</p>
+                        <span className="text-[10px] text-muted-foreground">BigQuery · per-SKU snapshot</span>
                       </div>
 
                       {/* Header row */}
                       <div className="px-4 py-2 bg-secondary/40 flex items-center text-[10px] font-semibold text-muted-foreground">
                         <div className="flex-1">Product</div>
+                        <div className="w-14 text-right">Qty</div>
                         <div className="w-28 text-right">Billings</div>
                         <div className="w-32 text-right">Commissionable</div>
                         <div className="w-16 text-right">Incl. Rate</div>
@@ -286,8 +288,9 @@ export default function Accounts() {
                                   <p className="font-medium text-foreground truncate">{p.name}</p>
                                   {p.category && <p className="text-[10px] text-muted-foreground">{p.category}</p>}
                                 </div>
-                                <div className="w-28 text-right font-semibold">{formatCurrency(p.mrr)}</div>
-                                <div className="w-32 text-right font-semibold text-v-teal">{formatCurrency(p.commissionable)}</div>
+                                <div className="w-14 text-right tnum text-muted-foreground">{p.quantity != null ? p.quantity.toLocaleString() : "—"}</div>
+                                <div className="w-28 text-right font-semibold tnum">{formatCurrency(p.mrr)}</div>
+                                <div className="w-32 text-right font-semibold text-v-teal tnum">{formatCurrency(p.commissionable)}</div>
                                 <div className={`w-16 text-right text-[10px] px-1.5 py-0.5 rounded font-medium ${
                                   inclRate >= 90 ? "bg-v-teal/10 text-v-teal"
                                   : inclRate >= 40 ? "bg-v-amber/10 text-v-amber"
@@ -304,8 +307,9 @@ export default function Accounts() {
                       {/* Totals row */}
                       <div className="px-4 py-2 border-t border-border bg-secondary/50 flex items-center text-xs font-semibold">
                         <div className="flex-1">Total</div>
-                        <div className="w-28 text-right">{formatCurrency(breakdownTotal)}</div>
-                        <div className="w-32 text-right text-v-teal">{formatCurrency(account.productBreakdown!.reduce((s, p) => s + p.commissionable, 0))}</div>
+                        <div className="w-14 text-right tnum text-muted-foreground">{account.productBreakdown!.reduce((s, p) => s + (p.quantity ?? 0), 0).toLocaleString()}</div>
+                        <div className="w-28 text-right tnum">{formatCurrency(breakdownTotal)}</div>
+                        <div className="w-32 text-right text-v-teal tnum">{formatCurrency(account.productBreakdown!.reduce((s, p) => s + p.commissionable, 0))}</div>
                         <div className="w-16"></div>
                       </div>
 
