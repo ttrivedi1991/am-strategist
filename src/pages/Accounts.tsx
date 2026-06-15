@@ -321,43 +321,71 @@ export default function Accounts() {
                         .filter(Boolean)
                         .map(docs => (
                           <div key={docs.month} className="border-t border-border">
-                            <div className="px-4 py-2 border-b border-border bg-secondary/50 flex items-center justify-between">
-                              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
-                                Invoices & Credit Notes — {docs.month}
-                              </p>
-                              <span className="text-[10px] text-muted-foreground">BigQuery · f_billing_tx</span>
+                            {/* Section header + summary */}
+                            <div className="px-4 py-2.5 border-b border-border bg-secondary/40">
+                              <div className="flex items-center justify-between">
+                                <p className="text-[11px] font-semibold text-foreground">Invoices &amp; Credit Notes</p>
+                                <span className="text-[10px] text-muted-foreground">{docs.month}</span>
+                              </div>
+                              <div className="flex items-center gap-3 mt-1 text-[11px]">
+                                <span className="text-muted-foreground">{docs.invoiceCount} invoice{docs.invoiceCount !== 1 ? "s" : ""}</span>
+                                <span className="font-semibold text-foreground tnum">{formatCurrency(docs.billed)} billed</span>
+                                {docs.credits < 0 && (
+                                  <span className="font-semibold text-v-red tnum">−{formatCurrency(Math.abs(docs.credits))} credited</span>
+                                )}
+                              </div>
                             </div>
-                            <div className="px-4 py-2 flex items-center gap-4 text-xs">
-                              <span className="text-muted-foreground">{docs.invoiceCount} invoice{docs.invoiceCount !== 1 ? "s" : ""}</span>
-                              <span className="font-semibold">{formatCurrency(docs.billed)} billed</span>
-                              {docs.credits < 0 && (
-                                <span className="font-semibold text-v-red">−{formatCurrency(Math.abs(docs.credits))} in credits</span>
-                              )}
-                            </div>
+
+                            {/* Invoices */}
                             {docs.topInvoices.length > 0 && (
-                              <div className="divide-y divide-border border-t border-border">
-                                {docs.topInvoices.map(inv => (
-                                  <div key={inv.id} className="flex items-center px-4 py-1.5 text-xs">
-                                    <span className="flex-1 font-mono text-[10px] text-muted-foreground truncate">{inv.id}</span>
-                                    <span className="w-24 text-[10px] text-muted-foreground">{inv.date}</span>
-                                    <span className="w-20 text-[10px] text-muted-foreground text-right">{inv.lineCount} line{inv.lineCount !== 1 ? "s" : ""}</span>
-                                    <span className="w-24 text-right font-semibold">{formatCurrency(inv.amount)}</span>
-                                  </div>
-                                ))}
+                              <div>
+                                <div className="flex items-center px-4 py-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground bg-secondary/20">
+                                  <span className="flex-1">Invoice #</span>
+                                  <span className="w-24">Date</span>
+                                  <span className="w-16 text-right">Lines</span>
+                                  <span className="w-24 text-right">Amount</span>
+                                </div>
+                                <div className="divide-y divide-border">
+                                  {docs.topInvoices.map(inv => (
+                                    <div key={inv.id} className="flex items-center px-4 py-2 text-xs">
+                                      <span className="flex-1 font-mono font-medium text-foreground">{inv.id}</span>
+                                      <span className="w-24 text-muted-foreground tnum">{inv.date}</span>
+                                      <span className="w-16 text-right text-muted-foreground tnum">{inv.lineCount}</span>
+                                      <span className="w-24 text-right font-semibold tnum">{formatCurrency(inv.amount)}</span>
+                                    </div>
+                                  ))}
+                                </div>
                                 {docs.invoiceCount > docs.topInvoices.length && (
-                                  <div className="px-4 py-1.5 text-[10px] text-muted-foreground">
-                                    + {docs.invoiceCount - docs.topInvoices.length} smaller invoices
+                                  <div className="px-4 py-1.5 text-[10px] text-muted-foreground border-t border-border">
+                                    + {docs.invoiceCount - docs.topInvoices.length} smaller invoice{docs.invoiceCount - docs.topInvoices.length !== 1 ? "s" : ""} (top {docs.topInvoices.length} shown)
                                   </div>
                                 )}
                               </div>
                             )}
-                            {docs.creditNotes.map(cn => (
-                              <div key={cn.id} className="flex items-center px-4 py-2 text-xs border-t border-v-red/30 bg-v-red/5">
-                                <span className="flex-1 font-medium text-v-red">Credit note <span className="font-mono text-[10px]">{cn.id}</span></span>
-                                <span className="w-24 text-[10px] text-muted-foreground">{cn.date}</span>
-                                <span className="w-24 text-right font-semibold text-v-red">−{formatCurrency(Math.abs(cn.amount))}</span>
+
+                            {/* Credit notes */}
+                            {docs.creditNotes.length > 0 && (
+                              <div className="border-t border-v-red/20 bg-v-red/[0.03]">
+                                <div className="flex items-center px-4 py-1.5 text-[10px] font-medium uppercase tracking-wide text-v-red/80">
+                                  <span className="flex-1">Credit Note #</span>
+                                  <span className="w-24">Date</span>
+                                  <span className="w-24 text-right">Amount</span>
+                                </div>
+                                <div className="divide-y divide-v-red/10">
+                                  {docs.creditNotes.map(cn => (
+                                    <div key={cn.id} className="flex items-center px-4 py-2 text-xs">
+                                      <span className="flex-1 font-mono font-medium text-v-red">{cn.id}</span>
+                                      <span className="w-24 text-muted-foreground tnum">{cn.date}</span>
+                                      <span className="w-24 text-right font-semibold text-v-red tnum">−{formatCurrency(Math.abs(cn.amount))}</span>
+                                    </div>
+                                  ))}
+                                </div>
                               </div>
-                            ))}
+                            )}
+
+                            <div className="px-4 py-1.5 text-[10px] text-muted-foreground border-t border-border">
+                              Source: BigQuery · f_billing_tx
+                            </div>
                           </div>
                         ))}
                     </div>
