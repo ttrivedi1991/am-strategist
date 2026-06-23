@@ -136,7 +136,7 @@ export const ACCOUNTS: Account[] = [
     products: ["Reputation AI Pro", "Conversations AI Pro", "Conversations AI Standard", "Conversations AI Premium"],
     productBreakdown: [{ name: "Custom Plan Subscription", category: "Vendasta Platform", mrr: 55326.0, commissionable: 52559.7 }, { name: "Reputation AI Pro", category: "Reputation AI", mrr: 3568.0, commissionable: 3389.6 }, { name: "WordPress Hosting Pro", category: "Website", mrr: 966.0, commissionable: 483.0 }, { name: "Website Support", category: "Website Support", mrr: 960.0, commissionable: 480.0 }, { name: "Conversations AI Pro", category: "Webchat", mrr: 663.0, commissionable: 629.85 }, { name: "Conversations AI Standard", category: "Webchat", mrr: 348.0, commissionable: 330.6 }, { name: "Advanced Reporting", category: "Analytics", mrr: 216.0, commissionable: 205.2 }, { name: "Conversations AI Premium", category: "Webchat", mrr: 79.0, commissionable: 75.05 }, { name: "WordPress Hosting Premium", category: "Website", mrr: 65.0, commissionable: 32.5 }, { name: "Social Marketing Pro", category: "Social", mrr: 64.0, commissionable: 60.8 }, { name: "Customer Voice Pro", category: "Reviews", mrr: 40.0, commissionable: 38.0 }],
     website: "telkom.co.za",
-    notes: "April ($82.1K) included a ~$20K subscription overcharge; a $20K credit plus offsetting adjustment was issued in May ($42.2K). Both months are billing artifacts — the true run rate is ~$62K/mo (confirmed Jun 2026). Major ISV partner in South Africa. Lunga is the primary contact.",
+    notes: "True run rate: ~$62K/mo (Custom Plan Subscription). April billed $82.1K due to a $20K overcharge on the sub. Vendasta issued a $20K credit in May; because the credit reverses the overcharge amount in addition to the normal billing cycle, the sub line appears as approximately −$40K in May, bringing the May total to $42.2K. Both April and May are billing artifacts — neither reflects the actual $62K run rate. Confirmed Jun 2026. Major ISV partner in South Africa. Lunga is the primary contact.",
     isMIA: false,
     onboardedDate: "2021-06-01",
     revenueHistory: [
@@ -166,7 +166,7 @@ export const ACCOUNTS: Account[] = [
     // subscription — billed $0 unless usage exceeds the sub, so it carries no commissionable value.
     productBreakdown: [{ name: "Enterprise 2026", category: "Vendasta Platform", mrr: 41400.0, commissionable: 39330.0 }, { name: "Social Marketing Pro", category: "Social", mrr: 0.0, commissionable: 0.0 }],
     website: "uwm.com",
-    notes: "Joined Feb 2026 on a contractual commitment of $41.4K/mo (Enterprise 2026 plan) — billed flat unless product usage exceeds the subscription (new Vendasta plan structure; usage discounts against the sub). Social Marketing Pro usage (~$22.7K value) is bundled, not billed. Expansion math: usage must clear the $41.4K bar before new dollars bill. Sarah DeCiantis (sdeciantis@uwm.com).",
+    notes: "Minimum monthly commitment of $41,400 (Enterprise 2026 plan) — billed flat regardless of usage volume. Social Marketing Pro (~$22.7K value) is bundled inside the commitment and carries $0 additional billing. Expansion math: product usage must exceed $41.4K before incremental dollars bill. isMIA flag reflects no formal meeting since Feb 2026 — not a churn signal, as billing is contractually guaranteed. Sarah DeCiantis (sdeciantis@uwm.com).",
     onboardedDate: "2026-02-01",
     revenueHistory: [
       { week: "Nov 25", mrr: 0 }, { week: "Dec 25", mrr: 0 }, { week: "Jan 26", mrr: 0 }, { week: "Feb 26", mrr: 41423 }, { week: "Mar 26", mrr: 41400 }, { week: "Apr 26", mrr: 41400 }, { week: "May 26", mrr: 41400 },
@@ -246,7 +246,7 @@ export const ACCOUNTS: Account[] = [
     products: ["Reputation AI Pro"],
     productBreakdown: [{ name: "Reputation AI Pro", category: "Reputation AI", mrr: 13615.0, commissionable: 12934.25 }],
     website: "web.com",
-    notes: "Flat contracted rate at $14.2K/mo — consistent all year. Parent company is Newfold Digital. Contacts: Kim Little (klittle@web.com) and Brian McMullin (brian.mcmullin@newfold.com). Good candidate to pilot AI upsell — large SMB resale base.",
+    notes: "Minimum monthly commitment of $14,245 — billed flat regardless of usage. Parent company is Newfold Digital. Contacts: Kim Little (klittle@web.com) and Brian McMullin (brian.mcmullin@newfold.com). Good candidate to pilot AI upsell — large SMB resale base.",
     isMIA: false,
     onboardedDate: "2022-01-15",
     revenueHistory: [

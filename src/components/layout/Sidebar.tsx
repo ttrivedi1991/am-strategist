@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useAM } from "@/context/AMContext";
 import {
-  LayoutDashboard, Users, BrainCircuit, Bell, Send, UserX, FileText, Zap, ChevronUp, Check, LogOut, TrendingUp
+  LayoutDashboard, Users, BrainCircuit, Bell, MessageSquare, UserX, FileText, Zap, ChevronUp, Check, LogOut, TrendingUp
 } from "lucide-react";
 
 const NAV = [
@@ -12,7 +12,7 @@ const NAV = [
   { to: "/commission", icon: TrendingUp, label: "Commission", amOnly: true },
   { to: "/ai-adoption", icon: BrainCircuit, label: "AI Adoption" },
   { to: "/intel", icon: Bell, label: "Org Intelligence" },
-  { to: "/outreach", icon: Send, label: "Outreach Planner" },
+  { to: "/strategize", icon: MessageSquare, label: "Strategize with Me" },
   { to: "/mia", icon: UserX, label: "MIA Recovery" },
   { to: "/brief", icon: FileText, label: "Weekly Brief" },
 ];

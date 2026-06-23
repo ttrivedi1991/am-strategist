@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Header } from "@/components/layout/Header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -6,41 +6,50 @@ import { Button } from "@/components/ui/button";
 import { formatDate, daysSince, formatCurrency } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { useAM } from "@/context/AMContext";
+import { signInWithPopup, GoogleAuthProvider } from "firebase/auth";
+import { auth, gmailProvider } from "@/lib/firebase";
+import { fetchLastEmailDates, saveGmailToken, loadGmailToken, clearGmailToken } from "@/lib/gmail";
 import {
   UserX, Clock, TrendingDown, AlertTriangle,
-  Mail, Calendar, ArrowRight, Flame, MessageCircle
+  Mail, Calendar, ArrowRight, Flame, MessageCircle,
+  Wifi, WifiOff, RefreshCw,
 } from "lucide-react";
 import { type Account } from "@/data/types";
 
 const MIA_THRESHOLD = 45;
 
-function getRiskLevel(account: Account): "critical" | "high" | "medium" {
-  const days = daysSince(account.lastMeeting);
+// Effective last-contact date: most recent of lastMeeting (from data) and
+// lastEmail (from Gmail live sync). Falls back to lastMeeting if Gmail isn't connected.
+function effectiveLastContact(account: Account, gmailDates: Record<string, string>): string {
+  const meeting = account.lastMeeting;
+  const email = gmailDates[account.id];
+  if (!email) return meeting;
+  return email > meeting ? email : meeting;
+}
+
+function daysSinceContact(account: Account, gmailDates: Record<string, string>): number {
+  return daysSince(effectiveLastContact(account, gmailDates));
+}
+
+function getRiskLevel(account: Account, gmailDates: Record<string, string>): "critical" | "high" | "medium" {
+  const days = daysSinceContact(account, gmailDates);
   const declining = account.mrr < account.mrrPrev;
   if (days > 80 || account.health === "churning") return "critical";
   if (days > 60 || declining) return "high";
   return "medium";
 }
 
-function getReEngagementHook(account: Account): string {
+function getReEngagementHook(account: Account, gmailDates: Record<string, string>): string {
+  const days = daysSinceContact(account, gmailDates);
   if (account.health === "churning") {
-    return `${account.name} hasn't engaged in ${daysSince(account.lastMeeting)} days and billing is declining. Send a personal video or executive escalation before they churn.`;
+    return `${account.name} hasn't engaged in ${days} days and billing is declining. Send a personal video or executive escalation before they churn.`;
   }
-  if (account.vertical === "Healthcare Tech") {
-    return `Dr. ${account.contactName.split(" ")[1]} is likely heads-down. Try an async loom or a "3 things I noticed about your reputation this month" email — no ask, just value.`;
-  }
-  if (account.vertical === "PropTech") {
-    return `New VP of Marketing just joined GreenLeaf. Cold reset — intro email to Nina Patel as a fresh start, not a follow-up.`;
-  }
-  if (account.vertical === "Home Services Tech") {
-    return `Cassandra expressed frustration before going dark. Acknowledge it directly — "I heard your concern and wanted to share what we've done about it."`;
-  }
-  return `${account.contactName} hasn't responded in ${daysSince(account.lastMeeting)} days. A value-forward email with a specific stat about their account ("your reviews grew X%") tends to cut through.`;
+  return `${account.contactName} hasn't responded in ${days} days. A value-forward email with a specific stat about their account ("your reviews grew X%") tends to cut through.`;
 }
 
-function getReEngagementEmail(account: Account): string {
+function getReEngagementEmail(account: Account, gmailDates: Record<string, string>): string {
   const firstName = account.contactName.split(" ")[0];
-  const days = daysSince(account.lastMeeting);
+  const days = daysSinceContact(account, gmailDates);
 
   if (account.health === "churning") {
     return `Hi ${firstName},\n\nI'll be honest — I haven't heard from you in a while and I'm not sure if something's gone wrong on our end.\n\nI genuinely value ${account.name} as a partner and I want to make sure you're getting value from what we're doing together. Can we get 20 minutes this week? I'd love to hear how things are going and show you what's been working for similar businesses.\n\nNo pitch — just a conversation.\n\nTanmay`;
@@ -54,16 +63,71 @@ export default function MIARecovery() {
   const { accounts } = useAM();
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  const miaAccounts = accounts.filter(a => a.isMIA || daysSince(a.lastMeeting) >= MIA_THRESHOLD)
-    .sort((a, b) => daysSince(b.lastMeeting) - daysSince(a.lastMeeting));
+  // Gmail sync state
+  const [gmailToken, setGmailToken] = useState<string | null>(() => loadGmailToken());
+  const [gmailDates, setGmailDates] = useState<Record<string, string>>({});
+  const [gmailLoading, setGmailLoading] = useState(false);
+  const [gmailError, setGmailError] = useState<string | null>(null);
+  const [lastSynced, setLastSynced] = useState<Date | null>(null);
 
-  const watchlist = accounts.filter(a =>
-    !a.isMIA &&
-    daysSince(a.lastMeeting) >= 30 &&
-    daysSince(a.lastMeeting) < MIA_THRESHOLD
-  );
+  const syncGmail = useCallback(async (token: string) => {
+    setGmailLoading(true);
+    setGmailError(null);
+    try {
+      const dates = await fetchLastEmailDates(token, accounts);
+      setGmailDates(dates);
+      setLastSynced(new Date());
+    } catch {
+      setGmailError("Gmail sync failed. Your token may have expired — reconnect below.");
+      clearGmailToken();
+      setGmailToken(null);
+    } finally {
+      setGmailLoading(false);
+    }
+  }, [accounts]);
+
+  // Auto-sync on load if token is available
+  useEffect(() => {
+    if (gmailToken && accounts.length > 0 && Object.keys(gmailDates).length === 0) {
+      syncGmail(gmailToken);
+    }
+  }, [gmailToken, accounts, gmailDates, syncGmail]);
+
+  async function connectGmail() {
+    setGmailError(null);
+    try {
+      const result = await signInWithPopup(auth, gmailProvider);
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      const token = credential?.accessToken;
+      if (!token) throw new Error("No access token returned");
+      saveGmailToken(token);
+      setGmailToken(token);
+      await syncGmail(token);
+    } catch (e: any) {
+      if (e?.code !== "auth/popup-closed-by-user") {
+        setGmailError("Could not connect Gmail. Try again.");
+      }
+    }
+  }
+
+  function disconnectGmail() {
+    clearGmailToken();
+    setGmailToken(null);
+    setGmailDates({});
+    setLastSynced(null);
+  }
+
+  const miaAccounts = accounts
+    .filter(a => a.isMIA || daysSinceContact(a, gmailDates) >= MIA_THRESHOLD)
+    .sort((a, b) => daysSinceContact(b, gmailDates) - daysSinceContact(a, gmailDates));
+
+  const watchlist = accounts.filter(a => {
+    const days = daysSinceContact(a, gmailDates);
+    return !a.isMIA && days >= 30 && days < MIA_THRESHOLD;
+  });
 
   const totalMRRAtRisk = miaAccounts.reduce((s, a) => s + a.mrr, 0);
+  const gmailConnected = !!gmailToken;
 
   return (
     <div className="animate-fade-in">
@@ -73,15 +137,70 @@ export default function MIARecovery() {
       />
 
       <div className="p-6 space-y-6">
+        {/* Gmail sync banner */}
+        <div className={`p-4 rounded-xl border flex items-start gap-3 ${gmailConnected ? "bg-v-teal/5 border-v-teal/20" : "bg-secondary border-border"}`}>
+          {gmailConnected
+            ? <Wifi className="w-4 h-4 text-v-teal mt-0.5 shrink-0" />
+            : <WifiOff className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
+          }
+          <div className="flex-1 min-w-0">
+            {gmailConnected ? (
+              <>
+                <p className="text-sm font-semibold text-foreground">
+                  Gmail connected — last communication dates are live
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  MIA threshold uses the most recent of your last meeting <em>or</em> last email with each partner.
+                  {lastSynced && <> Last synced {lastSynced.toLocaleTimeString()}.</>}
+                  {gmailLoading && <> Syncing…</>}
+                </p>
+                {gmailError && <p className="text-xs text-v-red mt-1">{gmailError}</p>}
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-semibold text-foreground">Connect Gmail to sync last communication dates</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Without Gmail, MIA uses <code>lastMeeting</code> from Firestore — which may be weeks behind your actual email activity. Connect once; your token is cached for 55 minutes.
+                </p>
+                {gmailError && <p className="text-xs text-v-red mt-1">{gmailError}</p>}
+              </>
+            )}
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {gmailConnected ? (
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => syncGmail(gmailToken!)}
+                  disabled={gmailLoading}
+                >
+                  <RefreshCw className={`w-3 h-3 ${gmailLoading ? "animate-spin" : ""}`} />
+                  Refresh
+                </Button>
+                <Button size="sm" variant="ghost" onClick={disconnectGmail} className="text-muted-foreground">
+                  Disconnect
+                </Button>
+              </>
+            ) : (
+              <Button size="sm" onClick={connectGmail} disabled={gmailLoading}>
+                <Mail className="w-3.5 h-3.5" />
+                Connect Gmail
+              </Button>
+            )}
+          </div>
+        </div>
+
         {/* Summary Banner */}
         <div className="p-4 rounded-xl bg-v-red/5 border border-v-red/20 flex items-start gap-3">
           <AlertTriangle className="w-5 h-5 text-v-red mt-0.5 shrink-0" />
           <div>
             <p className="text-sm font-semibold text-foreground">
-              {miaAccounts.length} partners have had no meeting in {MIA_THRESHOLD}+ days
+              {miaAccounts.length} partners have had no contact in {MIA_THRESHOLD}+ days
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              MIA definition: no meeting scheduled or completed in 45 days AND no billing change (activation or deactivation). These accounts need proactive re-engagement now.
+              MIA definition: no meeting <em>or email</em> in 45 days
+              {gmailConnected ? " (Gmail + meeting data combined)" : " (meeting data only — connect Gmail for email activity)"}.
             </p>
           </div>
         </div>
@@ -93,10 +212,11 @@ export default function MIARecovery() {
           </h2>
           <div className="space-y-3">
             {miaAccounts.map(account => {
-              const days = daysSince(account.lastMeeting);
-              const risk = getRiskLevel(account);
-              const hook = getReEngagementHook(account);
-              const email = getReEngagementEmail(account);
+              const days = daysSinceContact(account, gmailDates);
+              const lastEmailDate = gmailDates[account.id];
+              const risk = getRiskLevel(account, gmailDates);
+              const hook = getReEngagementHook(account, gmailDates);
+              const email = getReEngagementEmail(account, gmailDates);
               const isOpen = expanded === account.id;
               const declining = account.mrr < account.mrrPrev;
 
@@ -104,12 +224,10 @@ export default function MIARecovery() {
                 <Card key={account.id} className={`transition-all ${risk === "critical" ? "border-v-red/40" : risk === "high" ? "border-v-amber/40" : ""}`}>
                   <CardContent className="p-4">
                     <div className="flex items-start gap-3 flex-wrap">
-                      {/* Avatar */}
                       <div className="w-9 h-9 rounded-lg bg-secondary flex items-center justify-center text-xs font-bold text-foreground shrink-0">
                         {account.name.slice(0, 2)}
                       </div>
 
-                      {/* Info */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="text-sm font-semibold text-foreground">{account.name}</p>
@@ -127,17 +245,22 @@ export default function MIARecovery() {
                         <div className="flex items-center gap-4 mt-1.5 flex-wrap">
                           <div className="flex items-center gap-1 text-xs text-muted-foreground">
                             <Clock className="w-3 h-3" />
-                            <span className={days > 60 ? "text-v-red font-medium" : ""}>{days} days since last meeting</span>
+                            <span className={days > 60 ? "text-v-red font-medium" : ""}>{days} days since last contact</span>
                           </div>
                           <div className="text-xs text-muted-foreground">
-                            Last met: {formatDate(account.lastMeeting)}
+                            Last meeting: {formatDate(account.lastMeeting)}
                           </div>
+                          {lastEmailDate && (
+                            <div className="flex items-center gap-1 text-xs text-v-teal">
+                              <Mail className="w-3 h-3" />
+                              Last email: {formatDate(lastEmailDate)}
+                            </div>
+                          )}
                           <div className="text-xs font-medium text-foreground">
                             MRR: {formatCurrency(account.mrr)}
                           </div>
                         </div>
 
-                        {/* Strategy Hook */}
                         <div className="mt-2.5 p-2.5 rounded-lg bg-v-amber/5 border border-v-amber/20">
                           <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 mb-1">
                             <Flame className="w-3 h-3" /> Re-engagement Strategy
@@ -164,8 +287,8 @@ export default function MIARecovery() {
                               <Button size="sm" variant="outline">
                                 <Calendar className="w-3.5 h-3.5" /> Book Meeting
                               </Button>
-                              <Button size="sm" variant="ghost" onClick={() => navigate(`/outreach?account=${account.id}`)}>
-                                Full Sequence <ArrowRight className="w-3.5 h-3.5" />
+                              <Button size="sm" variant="ghost" onClick={() => navigate(`/strategize?account=${account.id}`)}>
+                                Strategize <ArrowRight className="w-3.5 h-3.5" />
                               </Button>
                             </div>
                           </div>
@@ -202,10 +325,15 @@ export default function MIARecovery() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-foreground">{account.name}</p>
-                        <p className="text-xs text-muted-foreground">{daysSince(account.lastMeeting)} days · last met {formatDate(account.lastMeeting)}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {daysSinceContact(account, gmailDates)} days · last contact {formatDate(effectiveLastContact(account, gmailDates))}
+                          {gmailDates[account.id] && gmailDates[account.id] > account.lastMeeting && (
+                            <span className="ml-1 text-v-teal">(email)</span>
+                          )}
+                        </p>
                       </div>
-                      <Button size="sm" variant="outline" onClick={() => navigate(`/outreach?account=${account.id}`)}>
-                        Plan <ArrowRight className="w-3 h-3" />
+                      <Button size="sm" variant="outline" onClick={() => navigate(`/strategize?account=${account.id}`)}>
+                        Strategize <ArrowRight className="w-3 h-3" />
                       </Button>
                     </div>
                   </CardContent>

@@ -27,4 +27,11 @@ export const db = getFirestore(app, "am-strategist");
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ hd: "vendasta.com" });
 
+// Separate provider used only for the Gmail MIA-sync flow (MIARecovery page).
+// Requesting this scope at initial sign-in would force all users through a Gmail
+// consent screen — instead we offer it opt-in on the page that uses it.
+export const gmailProvider = new GoogleAuthProvider();
+gmailProvider.addScope("https://www.googleapis.com/auth/gmail.readonly");
+gmailProvider.setCustomParameters({ hd: "vendasta.com" });
+
 export const ALLOWED_DOMAIN = "vendasta.com";

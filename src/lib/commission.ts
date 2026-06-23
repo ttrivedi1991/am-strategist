@@ -3,6 +3,7 @@
 // official plan PDF and the Q1-2026 commission statement (Jun 11, 2026).
 import type { Account } from "@/data/types";
 import { getLiveMeta, getAppData } from "@/data/store";
+import { SHEET_COMM } from "@/data/sheetComm";
 
 export const COMMISSION_TIERS = [
   { wamgr: 0.0000, rate: 0.0060, label: "0.00%" },
@@ -88,21 +89,29 @@ export function q2EligiblePartners(accounts: Account[]): Account[] {
   return accounts.filter(a => a.mrr > 0 && new Date(a.onboardedDate) < new Date("2026-04-01"));
 }
 
-// Commissionable dollars for one month: raw (official) billings × blended rate,
-// excluding Onboarding (per plan). Matches the warehouse — credits included.
+// Commissionable dollars for one month. Uses finance-sheet actuals (SHEET_COMM)
+// when available for a partner — these include post-close manual adjustments and
+// are keyed by SKU-level inclusion rate rather than a blended estimate.
+// Falls back to raw billings × blended rate for partners/months not in the sheet.
 export function monthlyCommissionable(accounts: Account[], week: string): number {
-  return accounts.reduce(
-    (s, a) => s + (a.revenueHistory.find(h => h.week === week)?.mrr ?? 0) * blendedRate(a) - onboardingComm(a),
-    0
-  );
+  return accounts.reduce((s, a) => {
+    const sheetComm = a.agid ? SHEET_COMM[a.agid]?.[week] : undefined;
+    if (sheetComm !== undefined) return s + sheetComm;
+    return s + (a.revenueHistory.find(h => h.week === week)?.mrr ?? 0) * blendedRate(a) - onboardingComm(a);
+  }, 0);
 }
 
 // Same, with one-time credits reversed — used ONLY as the June projection anchor.
+// For partners with sheet actuals, adds back the commissionable-equivalent of any
+// credit adjustments so the projection isn't anchored on a credit-depressed month.
 function monthlyCommissionableCreditFree(accounts: Account[], week: string): number {
-  return accounts.reduce(
-    (s, a) => s + adjustedBilling(a, week) * blendedRate(a) - onboardingComm(a),
-    0
-  );
+  return accounts.reduce((s, a) => {
+    const sheetComm = a.agid ? SHEET_COMM[a.agid]?.[week] : undefined;
+    if (sheetComm !== undefined) {
+      return s + sheetComm + billingAdjustment(a.name, week) * blendedRate(a);
+    }
+    return s + adjustedBilling(a, week) * blendedRate(a) - onboardingComm(a);
+  }, 0);
 }
 
 // Current-month commissionable so far, from the live MTD billings.

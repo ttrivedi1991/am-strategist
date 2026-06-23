@@ -72,8 +72,8 @@ export default function Dashboard() {
   return (
     <div className="animate-fade-in">
       <Header
-        title={`Good morning, ${selectedAM.name.split(" ")[0]} 👋`}
-        subtitle={`Here's your strategic overview for the week of ${new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}`}
+        title="Book of Business"
+        subtitle={`${selectedAM.name} · ${selectedAM.title}`}
       />
 
       <div className="p-6 space-y-6">
