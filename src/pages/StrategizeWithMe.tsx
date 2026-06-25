@@ -9,6 +9,56 @@ import { type Account, type AMProfile } from "@/data/types";
 import { Send, Sparkles, RotateCcw, Copy, Check, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+// ─── Markdown renderer ────────────────────────────────────────────────────────
+
+function MarkdownText({ content }: { content: string }) {
+  const lines = content.split("\n");
+  const nodes: React.ReactNode[] = [];
+  let i = 0;
+
+  function renderInline(text: string): React.ReactNode[] {
+    const parts: React.ReactNode[] = [];
+    const re = /(\*\*(.+?)\*\*|`([^`]+)`|\*(.+?)\*)/g;
+    let last = 0, m: RegExpExecArray | null;
+    while ((m = re.exec(text)) !== null) {
+      if (m.index > last) parts.push(text.slice(last, m.index));
+      if (m[2] !== undefined) parts.push(<strong key={m.index}>{m[2]}</strong>);
+      else if (m[3] !== undefined) parts.push(<code key={m.index} className="bg-secondary px-1 rounded text-[11px] font-mono">{m[3]}</code>);
+      else if (m[4] !== undefined) parts.push(<em key={m.index}>{m[4]}</em>);
+      last = m.index + m[0].length;
+    }
+    if (last < text.length) parts.push(text.slice(last));
+    return parts;
+  }
+
+  while (i < lines.length) {
+    const line = lines[i];
+    if (!line.trim()) { nodes.push(<div key={i} className="h-2" />); i++; continue; }
+    if (/^#{1,3} /.test(line)) {
+      nodes.push(<p key={i} className="font-semibold text-foreground mt-1">{renderInline(line.replace(/^#+\s/, ""))}</p>);
+      i++; continue;
+    }
+    if (/^(\s*[-*•]\s|\s*\d+\.\s)/.test(line)) {
+      const items: string[] = [];
+      const isOrdered = /^\s*\d+\./.test(line);
+      while (i < lines.length && /^(\s*[-*•]\s|\s*\d+\.\s)/.test(lines[i])) {
+        items.push(lines[i].replace(/^\s*[-*•]\s/, "").replace(/^\s*\d+\.\s/, ""));
+        i++;
+      }
+      const Tag = isOrdered ? "ol" : "ul";
+      nodes.push(
+        <Tag key={i} className={isOrdered ? "list-decimal list-inside space-y-0.5 my-1" : "list-disc list-inside space-y-0.5 my-1"}>
+          {items.map((it, j) => <li key={j} className="text-sm">{renderInline(it)}</li>)}
+        </Tag>
+      );
+      continue;
+    }
+    nodes.push(<p key={i} className="text-sm leading-relaxed">{renderInline(line)}</p>);
+    i++;
+  }
+  return <div className="space-y-0.5">{nodes}</div>;
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Message {
@@ -47,7 +97,7 @@ ABOUT TANMAY:
 - QoQ trend: ${qoqPct >= 0 ? "+" : ""}${qoqPct}% vs March 2026 close (the commission baseline)
 - Commission basis: WAMGR — weighted average monthly growth rate across the book, Q2 2026 (Apr–Jun vs Mar close)
 - MIA accounts: ${miaCount} partners with no contact in 45+ days
-- Today: June 22, 2026
+- Today: ${new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
 
 BOOK OF BUSINESS:
 ${accountLines}
@@ -148,7 +198,7 @@ export default function StrategizeWithMe() {
   const accountId = searchParams.get("account");
   const focusAccount = accounts.find(a => a.id === accountId);
 
-  const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY as string | undefined;
+  const { anthropicApiKey: apiKey } = useAM();
   const systemPrompt = buildSystemPrompt(accounts, selectedAM);
 
   const [messages, setMessages] = useState<Message[]>([]);
@@ -267,7 +317,7 @@ export default function StrategizeWithMe() {
             <div>
               <p className="text-sm font-semibold text-foreground">Claude API key not configured</p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Add <code className="bg-secondary px-1 rounded text-[11px]">VITE_ANTHROPIC_API_KEY=sk-ant-...</code> to <code className="bg-secondary px-1 rounded text-[11px]">.env.local</code> and restart the dev server. Your key stays local — it never leaves this browser.
+                Run <code className="bg-secondary px-1 rounded text-[11px]">npx tsx scripts/seed-firestore.ts</code> with <code className="bg-secondary px-1 rounded text-[11px]">ANTHROPIC_API_KEY</code> set to seed the key to Firestore.
               </p>
             </div>
           </div>
@@ -346,12 +396,12 @@ export default function StrategizeWithMe() {
                 msg.role === "user" ? "flex flex-col items-end" : ""
               )}>
                 <div className={cn(
-                  "rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap",
+                  "rounded-2xl px-4 py-3",
                   msg.role === "user"
-                    ? "bg-v-blue text-white rounded-tr-sm"
+                    ? "bg-v-blue text-white rounded-tr-sm text-sm leading-relaxed whitespace-pre-wrap"
                     : "bg-background border border-border text-foreground rounded-tl-sm"
                 )}>
-                  {msg.content}
+                  {msg.role === "assistant" ? <MarkdownText content={msg.content} /> : msg.content}
                   {streaming && msg.role === "assistant" && msg.content === "" && (
                     <span className="inline-flex gap-1 items-center">
                       <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: "0ms" }} />

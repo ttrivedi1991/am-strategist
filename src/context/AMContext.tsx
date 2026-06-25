@@ -27,6 +27,7 @@ interface AMContextValue {
   billingDocs: Record<string, PartnerBillingDocs>;
   billingDocsMtd: Record<string, PartnerBillingDocs>;
   aiAdoption: AIAdoptionData;
+  anthropicApiKey: string | null;
 }
 
 const AMContext = createContext<AMContextValue | null>(null);
@@ -131,6 +132,7 @@ export function AMProvider({ children }: { children: ReactNode }) {
       billingDocs: data?.billingDocs ?? {},
       billingDocsMtd: data?.billingDocsMtd ?? {},
       aiAdoption: data?.aiAdoption ?? {},
+      anthropicApiKey: data?.anthropicApiKey ?? null,
     }}>
       {children}
     </AMContext.Provider>
@@ -138,7 +140,7 @@ export function AMProvider({ children }: { children: ReactNode }) {
 }
 
 async function loadAppData(): Promise<AppData> {
-  const [accountsSnap, rosterSnap, alertsSnap, liveDoc, aiDoc, bdDoc, bdMtdDoc, adjDoc] = await Promise.all([
+  const [accountsSnap, rosterSnap, alertsSnap, liveDoc, aiDoc, bdDoc, bdMtdDoc, adjDoc, configDoc] = await Promise.all([
     getDocs(collection(db, "accounts")),
     getDocs(collection(db, "roster")),
     getDocs(collection(db, "orgAlerts")),
@@ -147,6 +149,7 @@ async function loadAppData(): Promise<AppData> {
     getDoc(doc(db, "meta", "billingDocs")),
     getDoc(doc(db, "meta", "billingDocsMtd")),
     getDoc(doc(db, "meta", "billingAdjustments")),
+    getDoc(doc(db, "meta", "config")),
   ]);
   const roster = rosterSnap.docs.map(d => d.data() as AMProfile).sort((a, b) => a.id.localeCompare(b.id));
   return {
@@ -158,6 +161,7 @@ async function loadAppData(): Promise<AppData> {
     billingDocs: (bdDoc.data()?.byAgid ?? {}) as Record<string, PartnerBillingDocs>,
     billingDocsMtd: (bdMtdDoc.data()?.byAgid ?? {}) as Record<string, PartnerBillingDocs>,
     billingAdjustments: (adjDoc.data()?.items ?? []) as BillingAdjustment[],
+    anthropicApiKey: (configDoc.data()?.anthropicApiKey as string | undefined) ?? null,
   };
 }
 
