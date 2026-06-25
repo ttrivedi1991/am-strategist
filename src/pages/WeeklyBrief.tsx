@@ -1,15 +1,117 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Header } from "@/components/layout/Header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAM } from "@/context/AMContext";
-import { formatCurrency, commissionableMRR } from "@/lib/utils";
+import { formatCurrency, commissionableMRR, daysSince } from "@/lib/utils";
 import {
-  Sparkles, ArrowRight, Zap, Target, Users,
-  ChevronDown, ChevronUp, ClipboardPaste, Loader2
+  Sparkles, ArrowRight, Target, ChevronDown, ChevronUp,
+  ClipboardPaste, Loader2, Lightbulb, AlertCircle,
 } from "lucide-react";
+import type { Account } from "@/data/types";
+
+// ─── Types ─────────────────────────────────────────────────────────────────────
+
+interface ProductSignal {
+  title: string;
+  summary: string;
+  products: string[];
+  urgencyTag?: string;
+}
+
+interface BriefAction {
+  accountId: string;
+  accountName: string;
+  product: string;
+  urgency: "high" | "medium" | "low";
+  action: string;
+  rationale: string;
+}
+
+interface BriefAnalysis {
+  execSummary: string;
+  productSignals: ProductSignal[];
+  actions: BriefAction[];
+}
+
+// ─── Account summaries for Gemini ──────────────────────────────────────────────
+
+function buildAccountSummaries(accounts: Account[]) {
+  return accounts.map(a => {
+    const latest = a.revenueHistory?.at(-1)?.mrr ?? 0;
+    const prior = a.revenueHistory?.at(-2)?.mrr ?? 0;
+    const days = daysSince(a.lastMeeting);
+    const situation =
+      days >= 45 ? "mia"
+      : a.health === "at-risk" || a.health === "churning" ? "at-risk"
+      : latest - prior < -1000 ? "declining"
+      : a.health === "champion" ? "champion"
+      : "stable";
+    return {
+      id: a.id,
+      name: a.name,
+      vertical: a.vertical,
+      mrr: latest,
+      situation,
+      aiAdoption: a.aiAdoption,
+      products: a.products.slice(0, 5),
+      gtmContext: a.gtmContext ?? null,
+      contactName: a.contactName,
+    };
+  }).sort((x, y) => y.mrr - x.mrr);
+}
+
+// ─── Gemini call ──────────────────────────────────────────────────────────────
+
+async function analyzeBriefWithGemini(
+  brief: string,
+  accounts: Account[],
+  apiKey: string,
+  signal: AbortSignal,
+): Promise<BriefAnalysis> {
+  const summaries = buildAccountSummaries(accounts);
+
+  const systemPrompt = `You are a strategic advisor for Tanmay Trivedi, a Senior Account Manager at Vendasta (ISV Channel vertical).
+Vendasta sells AI-powered SaaS products that Channel Partners (ISVs) resell or embed into their own platforms for SMBs.
+Tanmay manages ~32 active Channel Partners at ~$314K MRR.
+Key Vendasta products: Reputation AI Pro/Premium, Conversations AI (Pro/Standard/Premium), AI Receptionist, Vibe (AI website builder), Social Marketing Pro, Local SEO Pro.
+
+Your job: read the weekly brief and generate a prioritized action plan that is specific, strategic, and enterprise-grade.
+Rules:
+- If an account has a gtmContext field, use it to explain WHY the product update matters to THAT partner's actual business and their SMB customers.
+- Never write generic "pitch Product X" — write insight-driven recommendations tied to the partner's GTM.
+- urgency=high: time-sensitive (incentive expiring, MIA partner, declining revenue).
+- urgency=medium: clear fit, this week.
+- urgency=low: relevant, no immediate deadline.
+- Return ONLY valid JSON. No markdown, no preamble, just the JSON object.`;
+
+  const schemaHint = `{"execSummary":"string","productSignals":[{"title":"string","summary":"string","products":["string"],"urgencyTag":"string|optional"}],"actions":[{"accountId":"string","accountName":"string","product":"string","urgency":"high|medium|low","action":"string","rationale":"string"}]}`;
+
+  const userMessage = `Weekly Brief:\n${brief}\n\nBook of Business:\n${JSON.stringify(summaries)}\n\nReturn JSON matching this schema (max 3 product signals, max 7 actions; action and rationale each 1-2 sentences):\n${schemaHint}`;
+
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      signal,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: systemPrompt }] },
+        contents: [{ role: "user", parts: [{ text: userMessage }] }],
+        generationConfig: { responseMimeType: "application/json", maxOutputTokens: 2048 },
+      }),
+    },
+  );
+
+  if (!res.ok) throw new Error(`Gemini ${res.status}: ${await res.text()}`);
+  const data = await res.json();
+  const jsonText = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
+  return JSON.parse(jsonText) as BriefAnalysis;
+}
+
+// ─── Sample brief ─────────────────────────────────────────────────────────────
 
 const SAMPLE_BRIEF = `## Vendasta Product Roadmap Update — Week of April 27, 2026
 
@@ -33,123 +135,66 @@ const SAMPLE_BRIEF = `## Vendasta Product Roadmap Update — Week of April 27, 2
 - Google/LinkedIn ads targeting Home Services SMBs
 - Partner webinar: "How to Win with AI" — May 8, 2pm ET`;
 
-interface ActionItem {
-  account: string;
-  accountId: string;
-  commissionable: number;
-  action: string;
-  product: string;
-  urgency: "high" | "medium" | "low";
-  rationale: string;
-}
+// ─── Urgency config ───────────────────────────────────────────────────────────
 
-function parseBriefToActions(brief: string, accounts: import("@/data/types").Account[]): ActionItem[] {
-  const hasAIReceptionist = brief.toLowerCase().includes("ai receptionist");
-  const hasReviewResponder = brief.toLowerCase().includes("review responder");
-  const hasContentWriter = brief.toLowerCase().includes("content writer");
-  const hasCRM = brief.toLowerCase().includes("crm");
-  const hasHomeServices = brief.toLowerCase().includes("home services");
-  const hasLegal = brief.toLowerCase().includes("legal");
-  const hasDoubleCommission = brief.toLowerCase().includes("double commission") || brief.toLowerCase().includes("incentive");
+const urgencyConfig = {
+  high:   { label: "Act Now",    variant: "danger"  as const },
+  medium: { label: "This Week",  variant: "warning" as const },
+  low:    { label: "FYI",        variant: "info"    as const },
+};
 
-  const actions: ActionItem[] = [];
-
-  if (hasAIReceptionist) {
-    const targets = accounts.filter(a =>
-      (a.aiAdoption === "none" || a.aiAdoption === "basic") &&
-      ((hasHomeServices ? a.vertical === "Home Services Tech" : true) ||
-      (hasLegal ? a.vertical === "Digital Marketing" : false))
-    ).slice(0, 3);
-
-    targets.forEach(a => {
-      actions.push({
-        account: a.name,
-        accountId: a.id,
-        commissionable: commissionableMRR(a.productBreakdown),
-        action: `Pitch AI Receptionist v3.0 upgrade${hasDoubleCommission ? " (double commission incentive expires May 31)" : ""}`,
-        product: "AI Receptionist",
-        urgency: hasDoubleCommission ? "high" : "medium",
-        rationale: `${a.vertical} is a priority vertical this quarter. ${a.name} currently has ${a.aiAdoption === "none" ? "no AI adoption" : "basic AI"} — v3.0 with multi-language and CRM sync is a strong fit.`,
-      });
-    });
-  }
-
-  if (hasReviewResponder) {
-    const targets = accounts.filter(a => ["Hospitality Tech", "Automotive Tech", "Healthcare Tech"].includes(a.vertical) && a.aiAdoption !== "power").slice(0, 2);
-    targets.forEach(a => {
-      actions.push({
-        account: a.name,
-        accountId: a.id,
-        commissionable: commissionableMRR(a.productBreakdown),
-        action: "Demo new AI Review Responder bulk scheduling feature",
-        product: "AI Review Responder",
-        urgency: "medium",
-        rationale: `${a.vertical} businesses get high review volume. Bulk scheduling and tone customization directly address their pain.`,
-      });
-    });
-  }
-
-  if (hasContentWriter) {
-    const targets = accounts.filter(a => ["Home Services", "Healthcare"].includes(a.vertical) && a.aiAdoption === "none").slice(0, 2);
-    targets.forEach(a => {
-      actions.push({
-        account: a.name,
-        accountId: a.id,
-        commissionable: commissionableMRR(a.productBreakdown),
-        action: "Introduce new AI Content Writer templates for their vertical",
-        product: "AI Content Writer",
-        urgency: "low",
-        rationale: `New vertical-specific templates lower the barrier to entry for AI content adoption in ${a.vertical}.`,
-      });
-    });
-  }
-
-  if (hasCRM) {
-    const targets = accounts.filter(a => a.products.includes("CRM Pro")).slice(0, 2);
-    targets.forEach(a => {
-      actions.push({
-        account: a.name,
-        accountId: a.id,
-        commissionable: commissionableMRR(a.productBreakdown),
-        action: "Show new CRM pipeline view with AI close probability scores",
-        product: "CRM Pro",
-        urgency: "low",
-        rationale: `${a.name} is already a CRM Pro customer — this feature upgrade reinforces product value and reduces churn risk.`,
-      });
-    });
-  }
-
-  // Rank by commissionable book value — biggest commission impact first.
-  return actions.sort((a, b) => b.commissionable - a.commissionable).slice(0, 8);
-}
-
-const urgencyColors = { high: "danger", medium: "warning", low: "info" } as const;
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function WeeklyBrief() {
   const navigate = useNavigate();
-  const { accounts } = useAM();
+  const { accounts, geminiApiKey } = useAM();
   const [brief, setBrief] = useState(SAMPLE_BRIEF);
-  const [actions, setActions] = useState<ActionItem[] | null>(null);
+  const [analysis, setAnalysis] = useState<BriefAnalysis | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [showBrief, setShowBrief] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
 
-  function analyze() {
+  async function analyze() {
+    if (!geminiApiKey) return;
+    abortRef.current?.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
     setLoading(true);
-    setActions(null);
-    setTimeout(() => {
-      setActions(parseBriefToActions(brief, accounts));
+    setError(null);
+    setAnalysis(null);
+    try {
+      const result = await analyzeBriefWithGemini(brief, accounts, geminiApiKey, ctrl.signal);
+      setAnalysis(result);
+    } catch (e: any) {
+      if (e.name !== "AbortError") setError(e.message ?? "Analysis failed");
+    } finally {
       setLoading(false);
-    }, 1200);
+    }
   }
+
+  // Enrich actions with commissionable value from live account data
+  const enrichedActions = (analysis?.actions ?? [])
+    .map(action => {
+      const acct = accounts.find(a => a.id === action.accountId || a.name === action.accountName);
+      return { ...action, commissionable: acct ? commissionableMRR(acct.productBreakdown) : 0 };
+    })
+    .sort((a, b) => {
+      const w = { high: 3, medium: 2, low: 1 };
+      return (w[b.urgency] - w[a.urgency]) || (b.commissionable - a.commissionable);
+    });
+
+  const highCount = enrichedActions.filter(a => a.urgency === "high").length;
 
   return (
     <div className="animate-fade-in">
       <Header
         title="Weekly Brief"
-        subtitle="Paste your R&D & Marketing brief — AI maps it to your book of business"
+        subtitle="Paste your R&D & Marketing brief — Gemini maps it to your book of business"
       />
 
       <div className="p-6 space-y-5">
+
         {/* Input */}
         <Card>
           <CardHeader>
@@ -160,14 +205,16 @@ export default function WeeklyBrief() {
                   Paste Weekly R&D / Marketing Brief
                 </CardTitle>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Copy from Confluence and paste here. AI will extract product updates and match them to outreach opportunities across your book.
+                  Copy from Confluence and paste here. Gemini reads the updates and generates partner-specific action items using each account's GTM context.
                 </p>
               </div>
               <button
                 onClick={() => setShowBrief(!showBrief)}
                 className="flex items-center gap-1.5 text-xs text-primary hover:underline"
               >
-                {showBrief ? <><ChevronUp className="w-3 h-3" /> Hide</> : <><ChevronDown className="w-3 h-3" /> Show brief</>}
+                {showBrief
+                  ? <><ChevronUp className="w-3 h-3" /> Hide</>
+                  : <><ChevronDown className="w-3 h-3" /> Show brief</>}
               </button>
             </div>
           </CardHeader>
@@ -183,96 +230,137 @@ export default function WeeklyBrief() {
             </CardContent>
           )}
           <CardContent className={showBrief ? "pt-0" : ""}>
-            <Button onClick={analyze} disabled={loading || !brief.trim()}>
-              {loading
-                ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Analyzing...</>
-                : <><Sparkles className="w-3.5 h-3.5" /> Generate Action Plan</>
-              }
-            </Button>
-            {!showBrief && brief.trim() && (
-              <span className="ml-3 text-xs text-muted-foreground">Sample brief loaded — click Analyze or paste your own</span>
-            )}
+            <div className="flex items-center gap-3 flex-wrap">
+              <Button
+                onClick={analyze}
+                disabled={loading || !brief.trim() || !geminiApiKey}
+              >
+                {loading
+                  ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Analyzing...</>
+                  : <><Sparkles className="w-3.5 h-3.5" /> Generate Action Plan</>}
+              </Button>
+              {!geminiApiKey && (
+                <span className="flex items-center gap-1.5 text-xs text-amber-600">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  Gemini key not configured — run <code className="bg-secondary px-1 rounded">GEMINI_API_KEY=... npx tsx scripts/seed-firestore.ts</code>
+                </span>
+              )}
+              {geminiApiKey && !showBrief && brief.trim() && (
+                <span className="text-xs text-muted-foreground">Sample brief loaded — click Generate or paste your own</span>
+              )}
+            </div>
           </CardContent>
         </Card>
 
-        {/* Results */}
+        {/* Loading */}
         {loading && (
           <div className="flex items-center justify-center py-12 gap-3 text-muted-foreground">
             <Loader2 className="w-5 h-5 animate-spin" />
-            <span className="text-sm">Mapping brief to your book of business...</span>
+            <span className="text-sm">Analyzing brief against your book of business...</span>
           </div>
         )}
 
-        {actions && !loading && (
-          <div className="space-y-4 animate-fade-in">
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-v-purple" />
-              <h2 className="text-sm font-semibold text-foreground">
-                {actions.length} Account-Aligned Actions Extracted
-              </h2>
-              <Badge variant="default">{actions.filter(a => a.urgency === "high").length} urgent</Badge>
-              <span className="text-xs text-muted-foreground">ranked by commissionable book value · AI products add at 95% inclusion</span>
-            </div>
+        {/* Error */}
+        {error && !loading && (
+          <div className="flex items-center gap-2.5 p-3.5 rounded-xl bg-red-500/5 border border-red-500/20 text-sm text-red-600">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            {error}
+          </div>
+        )}
 
-            {/* Highlight: Double Commission */}
-            {brief.toLowerCase().includes("double commission") && (
-              <div className="p-3.5 rounded-xl bg-v-green/5 border border-v-green/30 flex items-start gap-2.5">
-                <Zap className="w-4 h-4 text-v-green mt-0.5 shrink-0" />
-                <div>
-                  <p className="text-sm font-semibold text-foreground">💰 Incentive Alert: Double Commission on AI Receptionist</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Offer expires May 31. Prioritize AI Receptionist pitches to No-AI and Basic-AI accounts this week for maximum commission impact.</p>
+        {/* Results */}
+        {analysis && !loading && (
+          <div className="space-y-5 animate-fade-in">
+
+            {/* Exec summary */}
+            {analysis.execSummary && (
+              <div className="p-4 rounded-xl bg-v-purple/5 border border-v-purple/20">
+                <div className="flex items-start gap-2.5">
+                  <Sparkles className="w-4 h-4 text-v-purple mt-0.5 shrink-0" />
+                  <p className="text-sm text-foreground leading-relaxed">{analysis.execSummary}</p>
                 </div>
               </div>
             )}
 
-            <div className="space-y-2.5">
-              {actions.map((action, idx) => (
-                <Card key={idx}>
-                  <CardContent className="p-4">
-                    <div className="flex items-start gap-3 flex-wrap">
-                      <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center shrink-0">
-                        <Target className="w-4 h-4 text-muted-foreground" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap mb-1">
-                          <p className="text-sm font-semibold text-foreground">{action.account}</p>
-                          <Badge variant={urgencyColors[action.urgency]}>{action.urgency === "high" ? "Act Now" : action.urgency === "medium" ? "This Week" : "FYI"}</Badge>
-                          <span className="text-xs px-1.5 py-0.5 rounded bg-v-blue/10 text-v-blue font-medium">{action.product}</span>
-                          <span className="text-xs font-medium text-v-teal">{formatCurrency(action.commissionable)}/mo commissionable</span>
+            {/* Product signals */}
+            {analysis.productSignals?.length > 0 && (
+              <div className="space-y-2">
+                <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+                  <Lightbulb className="w-3.5 h-3.5" />
+                  Product Signals Extracted
+                </h2>
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {analysis.productSignals.map((sig, idx) => (
+                    <Card key={idx} className="border-border/60">
+                      <CardContent className="p-3.5">
+                        <div className="flex items-start justify-between gap-2 mb-1.5">
+                          <p className="text-sm font-semibold text-foreground leading-tight">{sig.title}</p>
+                          {sig.urgencyTag && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-v-blue/10 text-v-blue font-medium shrink-0">{sig.urgencyTag}</span>
+                          )}
                         </div>
-                        <p className="text-sm text-foreground">{action.action}</p>
-                        <p className="text-xs text-muted-foreground mt-1">{action.rationale}</p>
-                      </div>
-                      <Button size="sm" variant="outline" onClick={() => navigate(`/outreach?account=${action.accountId}`)}>
-                        Outreach <ArrowRight className="w-3.5 h-3.5" />
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+                        <p className="text-xs text-muted-foreground leading-relaxed">{sig.summary}</p>
+                        {sig.products?.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {sig.products.map(p => (
+                              <span key={p} className="text-[10px] px-1.5 py-0.5 rounded bg-secondary text-muted-foreground">{p}</span>
+                            ))}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Action plan */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Target className="w-4 h-4 text-v-teal" />
+                <h2 className="text-sm font-semibold text-foreground">
+                  {enrichedActions.length} Account-Aligned Actions
+                </h2>
+                {highCount > 0 && <Badge variant="danger">{highCount} urgent</Badge>}
+                <span className="text-xs text-muted-foreground">ranked by urgency then commissionable book value</span>
+              </div>
+
+              <div className="space-y-2.5">
+                {enrichedActions.map((action, idx) => {
+                  const urg = urgencyConfig[action.urgency];
+                  const acct = accounts.find(a => a.id === action.accountId || a.name === action.accountName);
+                  return (
+                    <Card key={idx}>
+                      <CardContent className="p-4">
+                        <div className="flex items-start gap-3 flex-wrap">
+                          <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center shrink-0">
+                            <Target className="w-4 h-4 text-muted-foreground" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap mb-1">
+                              <p className="text-sm font-semibold text-foreground">{action.accountName}</p>
+                              <Badge variant={urg.variant}>{urg.label}</Badge>
+                              <span className="text-xs px-1.5 py-0.5 rounded bg-v-blue/10 text-v-blue font-medium">{action.product}</span>
+                              {action.commissionable > 0 && (
+                                <span className="text-xs font-medium text-v-teal">{formatCurrency(action.commissionable)}/mo commissionable</span>
+                              )}
+                            </div>
+                            <p className="text-sm text-foreground">{action.action}</p>
+                            <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{action.rationale}</p>
+                          </div>
+                          {acct && (
+                            <Button size="sm" variant="outline" onClick={() => navigate(`/outreach?account=${acct.id}`)}>
+                              Outreach <ArrowRight className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
             </div>
 
-            {/* Webinar Promo */}
-            {brief.toLowerCase().includes("webinar") && (
-              <Card className="border-v-teal/30 bg-v-teal/5">
-                <CardContent className="p-4">
-                  <div className="flex items-start gap-3">
-                    <Users className="w-5 h-5 text-v-teal mt-0.5 shrink-0" />
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">Webinar: "How to Win with AI" — May 8, 2pm ET</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Invite your at-risk and MIA accounts. This is a warm re-engagement vehicle — no sales pressure, just value.
-                      </p>
-                      <div className="flex flex-wrap gap-1.5 mt-2">
-                        {accounts.filter(a => a.isMIA || a.aiAdoption === "none").map(a => (
-                          <span key={a.id} className="text-[10px] px-1.5 py-0.5 rounded bg-secondary text-muted-foreground">{a.name}</span>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
           </div>
         )}
       </div>
