@@ -27,7 +27,7 @@ interface AMContextValue {
   billingDocs: Record<string, PartnerBillingDocs>;
   billingDocsMtd: Record<string, PartnerBillingDocs>;
   aiAdoption: AIAdoptionData;
-  anthropicApiKey: string | null;
+  geminiApiKey: string | null;
 }
 
 const AMContext = createContext<AMContextValue | null>(null);
@@ -132,7 +132,7 @@ export function AMProvider({ children }: { children: ReactNode }) {
       billingDocs: data?.billingDocs ?? {},
       billingDocsMtd: data?.billingDocsMtd ?? {},
       aiAdoption: data?.aiAdoption ?? {},
-      anthropicApiKey: data?.anthropicApiKey ?? null,
+      geminiApiKey: data?.geminiApiKey ?? null,
     }}>
       {children}
     </AMContext.Provider>
@@ -161,7 +161,7 @@ async function loadAppData(): Promise<AppData> {
     billingDocs: (bdDoc.data()?.byAgid ?? {}) as Record<string, PartnerBillingDocs>,
     billingDocsMtd: (bdMtdDoc.data()?.byAgid ?? {}) as Record<string, PartnerBillingDocs>,
     billingAdjustments: (adjDoc.data()?.items ?? []) as BillingAdjustment[],
-    anthropicApiKey: (configDoc.data()?.anthropicApiKey as string | undefined) ?? null,
+    geminiApiKey: (configDoc.data()?.geminiApiKey as string | undefined) ?? null,
   };
 }
 

@@ -141,23 +141,24 @@ async function streamChat(
   onChunk: (chunk: string) => void,
   signal: AbortSignal
 ): Promise<void> {
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    signal,
-    headers: {
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-      "anthropic-dangerous-allow-browser": "true",
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 1024,
-      stream: true,
-      system: systemPrompt,
-      messages,
-    }),
-  });
+  const contents = messages.map(m => ({
+    role: m.role === "assistant" ? "model" : "user",
+    parts: [{ text: m.content }],
+  }));
+
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?key=${apiKey}&alt=sse`,
+    {
+      method: "POST",
+      signal,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: systemPrompt }] },
+        contents,
+        generationConfig: { maxOutputTokens: 1024 },
+      }),
+    }
+  );
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -181,7 +182,7 @@ async function streamChat(
       if (data === "[DONE]") return;
       try {
         const parsed = JSON.parse(data);
-        const text = parsed?.delta?.text ?? parsed?.content_block?.text ?? "";
+        const text = parsed?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
         if (text) onChunk(text);
       } catch {
         // malformed SSE chunk — skip
@@ -198,7 +199,7 @@ export default function StrategizeWithMe() {
   const accountId = searchParams.get("account");
   const focusAccount = accounts.find(a => a.id === accountId);
 
-  const { anthropicApiKey: apiKey } = useAM();
+  const { geminiApiKey: apiKey } = useAM();
   const systemPrompt = buildSystemPrompt(accounts, selectedAM);
 
   const [messages, setMessages] = useState<Message[]>([]);
@@ -315,9 +316,9 @@ export default function StrategizeWithMe() {
           <div className="flex items-start gap-3 p-4 rounded-xl bg-v-amber/5 border border-v-amber/20">
             <AlertCircle className="w-4 h-4 text-v-amber mt-0.5 shrink-0" />
             <div>
-              <p className="text-sm font-semibold text-foreground">Claude API key not configured</p>
+              <p className="text-sm font-semibold text-foreground">Gemini API key not configured</p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Run <code className="bg-secondary px-1 rounded text-[11px]">npx tsx scripts/seed-firestore.ts</code> with <code className="bg-secondary px-1 rounded text-[11px]">ANTHROPIC_API_KEY</code> set to seed the key to Firestore.
+                Run <code className="bg-secondary px-1 rounded text-[11px]">GEMINI_API_KEY=... npx tsx scripts/seed-firestore.ts</code> to seed the key to Firestore.
               </p>
             </div>
           </div>
@@ -491,7 +492,7 @@ export default function StrategizeWithMe() {
         </div>
 
         <p className="text-[10px] text-muted-foreground text-center">
-          Powered by Claude · Your book data stays in this browser · Responses may be wrong — verify before sending
+          Powered by Gemini · Your book data stays in this browser · Responses may be wrong — verify before sending
         </p>
       </div>
     </div>

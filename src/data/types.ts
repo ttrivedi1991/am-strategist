@@ -128,5 +128,5 @@ export interface AppData {
   billingDocs: Record<string, PartnerBillingDocs>;
   billingDocsMtd: Record<string, PartnerBillingDocs>;
   billingAdjustments: BillingAdjustment[];
-  anthropicApiKey: string | null;
+  geminiApiKey: string | null;
 }

@@ -49,14 +49,14 @@ async function main() {
   await db.collection("meta").doc("billingAdjustments").set({ items: clean(BILLING_ADJUSTMENTS) });
   console.log("  meta: live, aiAdoption, billingDocs, billingDocsMtd, billingAdjustments");
 
-  // Anthropic API key — read from env at seed time, never committed to git.
-  // Pass via: ANTHROPIC_API_KEY=sk-ant-... npx tsx scripts/seed-firestore.ts
-  const anthropicApiKey = process.env.ANTHROPIC_API_KEY ?? null;
-  if (anthropicApiKey) {
-    await db.collection("meta").doc("config").set({ anthropicApiKey });
-    console.log("  meta/config: anthropicApiKey set");
+  // Gemini API key — read from env at seed time, never committed to git.
+  // Pass via: GEMINI_API_KEY=AIza... npx tsx scripts/seed-firestore.ts
+  const geminiApiKey = process.env.GEMINI_API_KEY ?? null;
+  if (geminiApiKey) {
+    await db.collection("meta").doc("config").set({ geminiApiKey });
+    console.log("  meta/config: geminiApiKey set");
   } else {
-    console.log("  meta/config: ANTHROPIC_API_KEY not set — skipping (existing value preserved)");
+    console.log("  meta/config: GEMINI_API_KEY not set — skipping (existing value preserved)");
   }
 
   console.log("Done.");
