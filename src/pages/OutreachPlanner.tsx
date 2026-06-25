@@ -251,14 +251,18 @@ function buildSequence(account: Account, ctx: AccountCommissionContext): Outreac
         channel: "email",
         action: "Re-engagement",
         subject: `${account.name} — checking in`,
-        body: `Hi ${first},\n\nIt's been a while since we've connected. I want to fix that — there are a few things on the Vendasta roadmap this quarter that are specific to what ${account.name}'s ${vc.smbs} are dealing with, and I'd rather walk through them with you than send a long note.\n\nAre you free for 20 minutes next week?\n\nTanmay`,
+        body: account.gtmContext
+          ? `Hi ${first},\n\n${account.gtmContext}\n\nI want to walk through what this means for ${account.name}'s roadmap specifically — there are two or three things from the Vendasta AI suite this quarter that fit directly into what you're already doing. Are you free for 20 minutes next week?\n\nTanmay`
+          : `Hi ${first},\n\nIt's been a while since we've connected — I want to fix that.\n\nThe Vendasta AI roadmap has moved fast this year, and there are a few things I'd like to walk through with you that are specific to what ${account.name}'s ${vc.smbs} are dealing with. I'd rather do it in 20 minutes than send a long note.\n\nAre you free next week?\n\nTanmay`,
       },
       {
         day: 5,
         channel: "email",
-        action: "Vertical Insight",
-        subject: `What's working for ${account.vertical} partners this quarter`,
-        body: `Hi ${first},\n\nWhile I have your attention: ${vc.aiAngle}. A few ${account.vertical} partners have been deploying this quarter with strong results on ${vc.theme}.\n\nGiven ${account.name}'s ${vc.smbs}, the fit looks direct. I can keep it to 15 minutes.\n\nTanmay`,
+        action: "Specific Product Angle",
+        subject: `A specific idea for ${account.name}`,
+        body: account.gtmContext
+          ? `Hi ${first},\n\nFollowing up on my note from earlier this week. One specific thing I want to put on the table: ${vc.aiAngle}.\n\nThe reason I'm flagging this for ${account.name} specifically: ${vc.theme} is exactly the gap I keep hearing from ${vc.smbs} in your space. The fit isn't generic — I want to show you what it looks like for your deployment.\n\nI can keep it to 15 minutes. What works?\n\nTanmay`
+          : `Hi ${first},\n\nWhile I have your attention: ${vc.aiAngle}. A few ${account.vertical} partners have been running this in Q2 with clear results on ${vc.theme}.\n\nGiven ${account.name}'s ${vc.smbs}, the fit is direct. I can keep it to 15 minutes.\n\nTanmay`,
       },
       {
         day: 11,
@@ -289,16 +293,20 @@ function buildSequence(account: Account, ctx: AccountCommissionContext): Outreac
       {
         day: 1,
         channel: "email",
-        action: "Account Review Request",
+        action: "Strategic Review Request",
         subject: `${account.name} — want to compare notes on Q2`,
-        body: `Hi ${first},\n\nI've been looking at ${account.name}'s direction heading into Q2 and want to make sure we're aligned on where things stand.\n\nA quick call — 20 minutes — would cover it. Are you free this week or next?\n\nTanmay`,
+        body: account.gtmContext
+          ? `Hi ${first},\n\n${account.gtmContext}\n\nI've been reviewing ${account.name}'s deployment with that context in mind and want to make sure we're building the right plan for Q2 together. A 20-minute call would cover it.\n\nAre you free this week or next?\n\nTanmay`
+          : `Hi ${first},\n\nI've been looking at ${account.name}'s direction heading into Q2 — given what your ${vc.smbs} are dealing with on ${vc.theme}, I want to make sure we're aligned on the right path forward.\n\nA quick call — 20 minutes — would cover it. Are you free this week or next?\n\nTanmay`,
       },
       {
         day: 4,
         channel: "email",
-        action: "Vertical Insight + Product Angle",
-        subject: `${account.vertical} partners and AI in Q2 — ${account.name}-specific take`,
-        body: `Hi ${first},\n\nWhile I have your attention: ${vc.aiAngle}. A few ${account.vertical} partners have run with this in Q2 and seen clear improvement on ${vc.theme}.\n\nGiven where ${account.name} is right now, this is either a path forward or it clarifies what's actually driving the billing movement — either way it's worth 20 minutes.\n\nTanmay`,
+        action: "Specific Product Fit",
+        subject: `A specific idea for ${account.name} in Q2`,
+        body: account.gtmContext
+          ? `Hi ${first},\n\nFollowing up on my note from earlier this week. One concrete thing I want to walk through: ${vc.aiAngle}.\n\nA few ${account.vertical} partners have run this in Q2 specifically because ${vc.theme} is one of the clearest levers they have right now. For ${account.name}, the fit is direct — I'd rather show you than describe it. Worth 20 minutes?\n\nTanmay`
+          : `Hi ${first},\n\nWhile I have your attention: ${vc.aiAngle}. A few ${account.vertical} partners have run with this in Q2 and seen clear improvement on ${vc.theme}.\n\nGiven where ${account.name} is right now, this is either a path forward or it clarifies what's driving the Q2 movement — either way it's worth 20 minutes.\n\nTanmay`,
       },
       {
         day: 8,
@@ -330,14 +338,18 @@ function buildSequence(account: Account, ctx: AccountCommissionContext): Outreac
         channel: "email",
         action: "QBR Invite",
         subject: `${account.name} — Q2 review and what's next`,
-        body: `Hi ${first},\n\n${account.name} is tracking well this quarter. I want to make sure we're building on that rather than just maintaining it.\n\nWorth a dedicated 30 minutes for a proper quarterly review? I'll come prepared with specifics on where the Q3 opportunity is.\n\nTanmay`,
+        body: account.gtmContext
+          ? `Hi ${first},\n\n${account.gtmContext}\n\nWith that as context, I want to make sure we're building on ${account.name}'s Q2 trajectory — not just maintaining it. Worth a dedicated 30 minutes for a quarterly review? I'll come with specifics on where the Q3 opportunity is.\n\nTanmay`
+          : `Hi ${first},\n\n${account.name} is performing well — I want to make sure we're building on that rather than just maintaining it.\n\nWorth a dedicated 30 minutes for a proper quarterly review? I'll come prepared with specifics on where the Q3 opportunity is for your ${vc.smbs}.\n\nTanmay`,
       },
       {
         day: 5,
         channel: "email",
         action: "Expansion Angle",
         subject: `An expansion idea for ${account.name}`,
-        body: `Hi ${first},\n\nAhead of our call — one thing I want to put on the table: ${vc.aiAngle}. Given ${account.name}'s trajectory and the scale of your ${vc.smbs}, this is the kind of expansion that makes sense to look at now rather than later in the year.\n\nI'll put together a short brief before we connect.\n\nTanmay`,
+        body: account.gtmContext
+          ? `Hi ${first},\n\nAhead of our call — one thing I want to put on the table: ${vc.aiAngle}.\n\nGiven ${account.name}'s scale and what your ${vc.smbs} are dealing with on ${vc.theme}, this is the expansion that makes sense now rather than later. I'll put together a short brief before we connect.\n\nTanmay`
+          : `Hi ${first},\n\nAhead of our call — one thing I want to put on the table: ${vc.aiAngle}. Given ${account.name}'s trajectory and the scale of your ${vc.smbs}, this is the kind of expansion that makes sense to look at now rather than later in the year.\n\nI'll put together a short brief before we connect.\n\nTanmay`,
       },
       {
         day: 10,
@@ -367,18 +379,25 @@ function buildSequence(account: Account, ctx: AccountCommissionContext): Outreac
   return [
     {
       day: 1,
-      channel: "gchat",
-      action: "Quick Touch-base",
-      body: `Hey ${first}, Q2 is looking solid for ${account.name}. I have a couple of roadmap items I'd like to walk through — are you open to a quick call next week?`,
+      channel: "email",
+      action: "Strategic Outreach",
+      subject: `${account.name} — a few Q2 ideas worth 20 minutes`,
+      body: account.gtmContext
+        ? `Hi ${first},\n\n${account.gtmContext}\n\nI want to walk through specifically how the Vendasta AI additions this quarter fit into what ${account.name} is already doing — the fit is direct and I'd rather show you than describe it.\n\nAre you free for 20 minutes this week or next?\n\nTanmay`
+        : `Hi ${first},\n\nI've been reviewing what ${account.name}'s ${vc.smbs} are dealing with on ${vc.theme} and want to share a few specific ideas.\n\n${vc.aiAngle}. I'd rather walk through what this means for ${account.name} specifically than send a long note.\n\nAre you free for 20 minutes this week or next?\n\nTanmay`,
     },
     {
-      day: 4,
+      day: 5,
       channel: "email",
-      action: "AI Roadmap Briefing",
-      subject: `2026 AI roadmap — a few things relevant to ${account.name}`,
-      body: `Hi ${first},\n\nFollowing up on my message earlier this week. The Vendasta AI roadmap has a few updates this quarter that are directly relevant to ${account.name}'s ${vc.smbs}: ${vc.aiAngle}.\n\n${hasAI
-        ? `You're already running ${aiList} — the items I want to walk through build on that.`
-        : `${account.name} doesn't have AI products active yet, which makes this a clean starting point — no migration or rework.`}\n\nDo you have 20 minutes this week or next?\n\nTanmay`,
+      action: "Product Fit Detail",
+      subject: `Re: ${account.name} — a few Q2 ideas worth 20 minutes`,
+      body: account.gtmContext
+        ? `Hi ${first},\n\nFollowing up on my note from earlier this week. The specific thing I want to walk through: ${vc.aiAngle}.\n\n${hasAI
+            ? `You're already running ${aiList} — the items I want to show you build directly on that.`
+            : `${account.name} doesn't have AI products active yet, which is actually a clean starting point — no migration, no rework, and the full value from day one.`}\n\nDo you have 20 minutes this week or next?\n\nTanmay`
+        : `Hi ${first},\n\nFollowing up on my note from earlier this week. The short version: ${vc.aiAngle}.\n\n${hasAI
+            ? `You're already running ${aiList} — the items I want to walk through build on that.`
+            : `${account.name} doesn't have AI products active yet, which makes this a clean starting point.`}\n\nDo you have 20 minutes?\n\nTanmay`,
     },
     {
       day: 9,
