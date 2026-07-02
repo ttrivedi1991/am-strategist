@@ -22,7 +22,8 @@ service cloud.firestore {
     // Read-only viewers (e.g. technical CSM) — dashboard access only.
     function isViewer() {
       return isVerified() && request.auth.token.email in [
-        'blang@vendasta.com'      // Brady Lang (Technical CSM)
+        'blang@vendasta.com',     // Brady Lang (Technical CSM)
+        'lmcrae@vendasta.com'     // L. McRae (read-only)
       ];
     }
 
