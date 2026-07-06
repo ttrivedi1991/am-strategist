@@ -114,6 +114,15 @@ function monthlyCommissionableCreditFree(accounts: Account[], week: string): num
   }, 0);
 }
 
+// Per-account commissionable for one month (uses SHEET_COMM actuals where
+// available, falls back to revenueHistory billing × blended rate).
+export function accountMonthlyCommissionable(account: Account, week: string): number {
+  const sheetComm = account.agid ? SHEET_COMM[account.agid]?.[week] : undefined;
+  if (sheetComm !== undefined) return sheetComm;
+  const billing = account.revenueHistory.find(h => h.week === week)?.mrr ?? 0;
+  return billing * blendedRate(account);
+}
+
 // Current-month commissionable so far, from the live MTD billings.
 export function mtdCommissionable(accounts: Account[]): number {
   return accounts.reduce((s, a) => s + (a.mtdBilling?.mrr ?? 0) * blendedRate(a), 0);

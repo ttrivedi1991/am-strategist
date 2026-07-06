@@ -180,7 +180,7 @@ const SITUATION_META: Record<Situation, { label: string; variant: "danger" | "wa
 
 // ─── Call prep ─────────────────────────────────────────────────────────────────
 
-function buildCallPrep(account: Account, ctx: AccountCommissionContext, situation: Situation): CallPrep {
+function buildCallPrep(account: Account, _ctx: AccountCommissionContext, situation: Situation): CallPrep {
   const vc = getVertCtx(account.vertical);
   const hasAI = account.products.length > 0;
 

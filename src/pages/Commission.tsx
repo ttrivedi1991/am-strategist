@@ -8,6 +8,7 @@ import { formatCurrency, formatMonthLabel } from "@/lib/utils";
 import {
   COMMISSION_TIERS, blendedRate,
   computeQ2Outlook, monthlyCommissionable, mtdCommissionable, q2EligiblePartners,
+  accountMonthlyCommissionable,
 } from "@/lib/commission";
 
 import { useNavigate } from "react-router-dom";
@@ -20,6 +21,18 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Cell
 } from "recharts";
+
+// ── Month filter options ─────────────────────────────────────────────────────
+
+const FILTER_MONTHS = [
+  { label: "Jan", week: "Jan 26", q: "Q1 '26" },
+  { label: "Feb", week: "Feb 26", q: "Q1 '26" },
+  { label: "Mar", week: "Mar 26", q: "Q1 '26" },
+  { label: "Apr", week: "Apr 26", q: "Q2 '26" },
+  { label: "May", week: "May 26", q: "Q2 '26" },
+] as const;
+
+type FilterWeek = typeof FILTER_MONTHS[number]["week"];
 
 // ── Commission plan constants (Jan 2026) ────────────────────────────────────
 
@@ -54,6 +67,7 @@ export default function Commission() {
   const navigate = useNavigate();
   const am = useAM();
   const [tab, setTab] = useState<"overview" | "sku">("overview");
+  const [focusMonth, setFocusMonth] = useState<FilterWeek>("May 26");
   const { accounts, selectedAM } = am;
   // Non-null: pages render only after AMContext finishes loading (ProtectedRoute gate).
   const LIVE_META = am.liveMeta!;
@@ -129,12 +143,12 @@ export default function Commission() {
 
   // ── Chart data ──────────────────────────────────────────────────────────────
   const chartData = [
-    { month: "Jan '26", comm: janComm, isBaseline: true },
-    { month: "Feb '26", comm: febComm, isBaseline: true },
-    { month: "Mar '26", comm: marComm, isBaseline: true },
-    { month: "Apr '26", comm: aprComm, isBaseline: false },
-    { month: "May '26", comm: mayComm, isBaseline: false },
-    { month: "Jun '26 (proj)", comm: junCommEst, isEstimate: true },
+    { month: "Jan '26", week: "Jan 26", comm: janComm, isBaseline: true },
+    { month: "Feb '26", week: "Feb 26", comm: febComm, isBaseline: true },
+    { month: "Mar '26", week: "Mar 26", comm: marComm, isBaseline: true },
+    { month: "Apr '26", week: "Apr 26", comm: aprComm, isBaseline: false },
+    { month: "May '26", week: "May 26", comm: mayComm, isBaseline: false },
+    { month: "Jun '26 (proj)", week: "Jun 26", comm: junCommEst, isEstimate: true },
   ];
 
   // ── Strategy Engine ─────────────────────────────────────────────────────────
@@ -224,6 +238,37 @@ export default function Commission() {
             {label}
           </button>
         ))}
+      </div>
+
+      {/* Month filter strip — shared across both tabs */}
+      <div className="px-6 py-3 flex items-center gap-4 flex-wrap border-b border-border bg-secondary/20">
+        <span className="text-xs font-medium text-muted-foreground shrink-0">Focus month:</span>
+        {(["Q1 '26", "Q2 '26"] as const).map(q => {
+          const months = FILTER_MONTHS.filter(m => m.q === q);
+          return (
+            <div key={q} className="flex items-center gap-1.5">
+              <span className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wide">{q}</span>
+              <div className="flex gap-1">
+                {months.map(m => (
+                  <button
+                    key={m.week}
+                    onClick={() => setFocusMonth(m.week)}
+                    className={`px-2.5 py-1 text-xs font-medium rounded-full transition-colors ${
+                      focusMonth === m.week
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-secondary text-muted-foreground hover:text-foreground hover:bg-secondary/80"
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+        <span className="text-[10px] text-muted-foreground ml-auto hidden sm:block">
+          {focusMonth} · commissionable {formatCurrency(monthlyCommissionable(q2EligiblePartners(accounts), focusMonth))}
+        </span>
       </div>
 
       {tab === "overview" && <div className="p-6 space-y-6">
@@ -322,9 +367,16 @@ export default function Commission() {
                     contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 12 }}
                   />
                   <Bar dataKey="comm" radius={[4, 4, 0, 0]}>
-                    {chartData.map((entry, i) => (
-                      <Cell key={i} fill={(entry as any).isEstimate ? "#d1d5db" : entry.isBaseline ? "#d1fae5" : "#00B67A"} />
-                    ))}
+                    {chartData.map((entry, i) => {
+                      const isFocus = entry.week === focusMonth;
+                      return (
+                        <Cell
+                          key={i}
+                          fill={isFocus ? "#6366f1" : (entry as any).isEstimate ? "#d1d5db" : entry.isBaseline ? "#d1fae5" : "#00B67A"}
+                          opacity={isFocus ? 1 : 0.75}
+                        />
+                      );
+                    })}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
@@ -341,19 +393,24 @@ export default function Commission() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    <tr className="bg-secondary/20 text-muted-foreground">
-                      <td className="px-3 py-2">Mar 2026 (Q2 baseline)</td>
+                    <tr className={`bg-secondary/20 text-muted-foreground ${focusMonth === "Mar 26" ? "ring-1 ring-inset ring-indigo-400/40 bg-indigo-50/30" : ""}`}>
+                      <td className="px-3 py-2">Mar 2026 (Q2 baseline){focusMonth === "Mar 26" && <span className="ml-1.5 text-[10px] text-indigo-500 font-semibold">◀ focus</span>}</td>
                       <td className="text-right px-3 py-2 font-medium">{formatCurrency(marComm)}</td>
                       <td className="text-right px-3 py-2">—</td>
                       <td className="text-right px-3 py-2">—</td>
                     </tr>
                     {[
-                      { label: "Apr 2026", comm: aprComm, growth: aprGrowth, prev: marComm },
-                      { label: "May 2026", comm: mayComm, growth: mayGrowth, prev: aprComm },
-                      { label: "Jun 2026 (proj. at pace)", comm: junCommEst, growth: junCommEst - mayComm, prev: mayComm, isEst: true },
-                    ].map(row => (
-                      <tr key={row.label} className={(row as any).isEst ? "opacity-50 italic" : ""}>
-                        <td className="px-3 py-2 font-medium">{row.label}</td>
+                      { label: "Apr 2026", week: "Apr 26", comm: aprComm, growth: aprGrowth, prev: marComm },
+                      { label: "May 2026", week: "May 26", comm: mayComm, growth: mayGrowth, prev: aprComm },
+                      { label: "Jun 2026 (proj. at pace)", week: "Jun 26", comm: junCommEst, growth: junCommEst - mayComm, prev: mayComm, isEst: true },
+                    ].map(row => {
+                      const isFocus = focusMonth === row.week;
+                      return (
+                      <tr key={row.label} className={`${(row as any).isEst ? "opacity-50 italic" : ""} ${isFocus ? "bg-indigo-50/40 font-semibold" : ""}`}>
+                        <td className="px-3 py-2 font-medium">
+                          {row.label}
+                          {isFocus && <span className="ml-1.5 text-[10px] text-indigo-500 font-semibold">◀ focus</span>}
+                        </td>
                         <td className="text-right px-3 py-2 font-medium">{formatCurrency(row.comm)}</td>
                         <td className={`text-right px-3 py-2 font-semibold ${row.growth >= 0 ? "text-v-green" : "text-v-red"}`}>
                           {row.growth >= 0 ? "+" : ""}{formatCurrency(row.growth)}
@@ -362,7 +419,8 @@ export default function Commission() {
                           {row.prev > 0 ? `${row.growth >= 0 ? "+" : ""}${((row.growth / row.prev) * 100).toFixed(2)}%` : "—"}
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                   <tfoot>
                     <tr className="bg-secondary/50 font-semibold border-t-2 border-border">
@@ -577,7 +635,7 @@ export default function Commission() {
         </Card>
       </div>}
 
-      {tab === "sku" && <SkuBreakdown accounts={accounts} onOutreach={id => navigate(`/outreach?account=${id}`)} />}
+      {tab === "sku" && <SkuBreakdown accounts={accounts} focusMonth={focusMonth} onOutreach={id => navigate(`/outreach?account=${id}`)} />}
     </div>
   );
 }
@@ -586,9 +644,11 @@ export default function Commission() {
 
 function SkuBreakdown({
   accounts,
+  focusMonth,
   onOutreach,
 }: {
   accounts: import("@/data/types").Account[];
+  focusMonth: FilterWeek;
   onOutreach: (id: string) => void;
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -628,15 +688,22 @@ function SkuBreakdown({
   const totalProductBilling = productRollup.reduce((s, p) => s + p.billing, 0);
   const totalProductComm = productRollup.reduce((s, p) => s + p.commissionable, 0);
 
-  // Per-account sorted by commissionable desc
+  // Per-account sorted by focusMonth commissionable desc.
+  // Billing comes from revenueHistory for the selected month.
+  // Commissionable uses SHEET_COMM actuals where available, else billing × blendedRate.
+  // SKU detail (productBreakdown) is always the latest snapshot — note shown in UI.
   const accountRows = accounts
-    .map(a => ({
-      id: a.id,
-      name: a.name,
-      skus: a.productBreakdown.filter(p => p.mrr > 0 || (p.quantity ?? 0) > 0).sort((x, y) => y.commissionable - x.commissionable),
-      totalBilling: a.productBreakdown.reduce((s, p) => s + (p.mrr > 0 ? p.mrr : 0), 0),
-      totalComm: a.productBreakdown.reduce((s, p) => s + (p.mrr > 0 ? p.commissionable : 0), 0),
-    }))
+    .map(a => {
+      const monthBilling = a.revenueHistory.find(h => h.week === focusMonth)?.mrr ?? 0;
+      const monthComm = accountMonthlyCommissionable(a, focusMonth);
+      return {
+        id: a.id,
+        name: a.name,
+        skus: a.productBreakdown.filter(p => p.mrr > 0 || (p.quantity ?? 0) > 0).sort((x, y) => y.commissionable - x.commissionable),
+        totalBilling: monthBilling,
+        totalComm: monthComm,
+      };
+    })
     .filter(a => a.totalBilling > 0)
     .sort((a, b) => b.totalComm - a.totalComm);
 
@@ -707,12 +774,14 @@ function SkuBreakdown({
 
       {/* ── By account ── */}
       <div className="space-y-2">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <h2 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
             <Users className="w-3.5 h-3.5 text-muted-foreground" />
-            By Account — SKU Detail
+            By Account — {focusMonth}
           </h2>
-          <span className="text-xs text-muted-foreground">sorted by commissionable $</span>
+          <span className="text-xs text-muted-foreground">
+            sorted by commissionable $ · billing from revenueHistory · SKU detail reflects latest product snapshot
+          </span>
         </div>
 
         {accountRows.map(a => {
