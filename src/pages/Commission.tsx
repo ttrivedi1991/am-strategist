@@ -653,126 +653,73 @@ function SkuBreakdown({
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  // Aggregate all active SKUs across the book
-  const allSkus = accounts.flatMap(a =>
-    a.productBreakdown.filter(p => p.mrr > 0 || (p.quantity ?? 0) > 0).map(p => ({
-      ...p,
-      accountId: a.id,
-      accountName: a.name,
+  // ── Single month-aware base ─────────────────────────────────────────────────
+  // For each account: compute actual monthly billing + commissionable, then
+  // scale each product's snapshot values proportionally. This makes BOTH tables
+  // respond to the month filter. The inclusion rate per product is stable (it
+  // comes from the commission plan, not billing volume), so the scale factor
+  // is applied uniformly across all products for that account.
+  const monthlyBase = accounts.map(a => {
+    const monthBilling = a.revenueHistory.find(h => h.week === focusMonth)?.mrr ?? 0;
+    const monthComm   = accountMonthlyCommissionable(a, focusMonth);
+    const snapBilling = a.productBreakdown.reduce((s, p) => s + (p.mrr > 0 ? p.mrr : 0), 0);
+    const snapComm    = a.productBreakdown.reduce((s, p) => s + (p.mrr > 0 ? p.commissionable : 0), 0);
+    const bScale = snapBilling > 0 ? monthBilling / snapBilling : 0;
+    const cScale = snapComm    > 0 ? monthComm   / snapComm    : 0;
+    return { account: a, monthBilling, monthComm, bScale, cScale };
+  }).filter(r => r.monthComm > 0 || r.monthBilling > 0);
+
+  // ── By Account rows ─────────────────────────────────────────────────────────
+  const accountRows = monthlyBase
+    .map(({ account, monthBilling, monthComm, bScale, cScale }) => ({
+      id: account.id,
+      name: account.name,
+      totalBilling: monthBilling,
+      totalComm: monthComm,
+      // Per-SKU: scale snapshot billing/commissionable by the monthly factor so
+      // rows sum to the correct monthly total shown in the account header.
+      skus: account.productBreakdown
+        .filter(p => p.mrr > 0 || (p.quantity ?? 0) > 0)
+        .map(p => ({
+          ...p,
+          mrr: p.mrr * bScale,
+          commissionable: p.commissionable * cScale,
+        }))
+        .sort((x, y) => y.commissionable - x.commissionable),
     }))
-  );
+    .sort((a, b) => b.totalComm - a.totalComm);
 
-  // Roll up by product name
-  const productMap = new Map<string, { category: string; billing: number; commissionable: number; accountIds: Set<string> }>();
-  allSkus.forEach(p => {
-    if (!productMap.has(p.name)) {
-      productMap.set(p.name, { category: p.category, billing: 0, commissionable: 0, accountIds: new Set() });
-    }
-    const entry = productMap.get(p.name)!;
-    entry.billing += p.mrr;
-    entry.commissionable += p.commissionable;
-    if (p.mrr > 0) entry.accountIds.add(p.accountId);
+  // ── Product rollup ──────────────────────────────────────────────────────────
+  const productMap = new Map<string, { category: string; billing: number; commissionable: number; acctIds: Set<string> }>();
+  monthlyBase.forEach(({ account, bScale, cScale }) => {
+    account.productBreakdown.filter(p => p.mrr > 0).forEach(p => {
+      if (!productMap.has(p.name)) {
+        productMap.set(p.name, { category: p.category, billing: 0, commissionable: 0, acctIds: new Set() });
+      }
+      const e = productMap.get(p.name)!;
+      e.billing       += p.mrr          * bScale;
+      e.commissionable += p.commissionable * cScale;
+      e.acctIds.add(account.id);
+    });
   });
-
   const productRollup = [...productMap.entries()]
     .map(([name, d]) => ({
       name,
       category: d.category,
       billing: d.billing,
       commissionable: d.commissionable,
-      accountCount: d.accountIds.size,
+      accountCount: d.acctIds.size,
       inclRate: d.billing > 0 ? d.commissionable / d.billing : 0,
     }))
     .sort((a, b) => b.commissionable - a.commissionable);
 
-  const totalProductBilling = productRollup.reduce((s, p) => s + p.billing, 0);
-  const totalProductComm = productRollup.reduce((s, p) => s + p.commissionable, 0);
-
-  // Per-account sorted by focusMonth commissionable desc.
-  // Billing comes from revenueHistory for the selected month.
-  // Commissionable uses SHEET_COMM actuals where available, else billing × blendedRate.
-  // SKU detail (productBreakdown) is always the latest snapshot — note shown in UI.
-  const accountRows = accounts
-    .map(a => {
-      const monthBilling = a.revenueHistory.find(h => h.week === focusMonth)?.mrr ?? 0;
-      const monthComm = accountMonthlyCommissionable(a, focusMonth);
-      return {
-        id: a.id,
-        name: a.name,
-        skus: a.productBreakdown.filter(p => p.mrr > 0 || (p.quantity ?? 0) > 0).sort((x, y) => y.commissionable - x.commissionable),
-        totalBilling: monthBilling,
-        totalComm: monthComm,
-      };
-    })
-    .filter(a => a.totalBilling > 0)
-    .sort((a, b) => b.totalComm - a.totalComm);
+  const totalBilling = productRollup.reduce((s, p) => s + p.billing, 0);
+  const totalComm    = productRollup.reduce((s, p) => s + p.commissionable, 0);
 
   return (
     <div className="p-6 space-y-6">
 
-      {/* ── Product rollup ── */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-1.5">
-            <Package className="w-3.5 h-3.5 text-v-blue" />
-            By Product — Aggregate Across Book
-          </CardTitle>
-          <p className="text-xs text-muted-foreground mt-1">
-            Commissionable $ rolled up per SKU across all active partners · sorted by commissionable desc
-          </p>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="bg-secondary/60 text-muted-foreground border-b border-border">
-                  <th className="text-left px-4 py-2.5 font-medium">Product</th>
-                  <th className="text-left px-4 py-2.5 font-medium hidden sm:table-cell">Category</th>
-                  <th className="text-right px-4 py-2.5 font-medium">Partners</th>
-                  <th className="text-right px-4 py-2.5 font-medium">Billings</th>
-                  <th className="text-right px-4 py-2.5 font-medium text-v-teal">Commissionable</th>
-                  <th className="text-right px-4 py-2.5 font-medium hidden md:table-cell">Incl. Rate</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {productRollup.map(p => {
-                  const pct = Math.round(p.inclRate * 100);
-                  return (
-                    <tr key={p.name} className="hover:bg-secondary/30">
-                      <td className="px-4 py-2.5 font-medium text-foreground">{p.name}</td>
-                      <td className="px-4 py-2.5 text-muted-foreground hidden sm:table-cell">{p.category}</td>
-                      <td className="px-4 py-2.5 text-right text-muted-foreground">{p.accountCount}</td>
-                      <td className="px-4 py-2.5 text-right font-medium tnum">{formatCurrency(p.billing)}</td>
-                      <td className="px-4 py-2.5 text-right font-bold text-v-teal tnum">{formatCurrency(p.commissionable)}</td>
-                      <td className="px-4 py-2.5 text-right hidden md:table-cell">
-                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                          p.billing === 0 ? "bg-secondary text-muted-foreground"
-                          : pct >= 90 ? "bg-v-teal/10 text-v-teal"
-                          : pct >= 40 ? "bg-v-amber/10 text-v-amber"
-                          : "bg-v-red/10 text-v-red"
-                        }`}>
-                          {p.billing > 0 ? `${pct}%` : "—"}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-              <tfoot>
-                <tr className="bg-secondary/50 border-t-2 border-border font-semibold text-xs">
-                  <td className="px-4 py-2.5" colSpan={2}>Total ({productRollup.length} SKUs)</td>
-                  <td className="px-4 py-2.5 text-right text-muted-foreground hidden sm:table-cell"></td>
-                  <td className="px-4 py-2.5 text-right tnum">{formatCurrency(totalProductBilling)}</td>
-                  <td className="px-4 py-2.5 text-right text-v-teal tnum">{formatCurrency(totalProductComm)}</td>
-                  <td className="px-4 py-2.5 hidden md:table-cell"></td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* ── By account ── */}
+      {/* ── By account ── shown first — responds directly to month filter */}
       <div className="space-y-2">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <h2 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
@@ -780,7 +727,7 @@ function SkuBreakdown({
             By Account — {focusMonth}
           </h2>
           <span className="text-xs text-muted-foreground">
-            sorted by commissionable $ · billing from revenueHistory · SKU detail reflects latest product snapshot
+            {accountRows.length} partners · sorted by commissionable $
           </span>
         </div>
 
@@ -824,10 +771,8 @@ function SkuBreakdown({
 
                 {isOpen && (
                   <div className="border-t border-border">
-                    {/* Header */}
                     <div className="flex items-center px-4 py-1.5 bg-secondary/40 text-[10px] font-semibold text-muted-foreground">
                       <div className="flex-1">Product</div>
-                      <div className="w-14 text-right hidden sm:block">Qty</div>
                       <div className="w-28 text-right">Billings</div>
                       <div className="w-32 text-right">Commissionable</div>
                       <div className="w-16 text-right hidden md:block">Incl. Rate</div>
@@ -840,9 +785,6 @@ function SkuBreakdown({
                             <div className="flex-1 min-w-0">
                               <p className="font-medium text-foreground truncate">{p.name}</p>
                               {p.category && <p className="text-[10px] text-muted-foreground">{p.category}</p>}
-                            </div>
-                            <div className="w-14 text-right tnum text-muted-foreground hidden sm:block">
-                              {p.quantity != null ? p.quantity.toLocaleString() : "—"}
                             </div>
                             <div className="w-28 text-right font-semibold tnum">{formatCurrency(p.mrr)}</div>
                             <div className="w-32 text-right font-semibold text-v-teal tnum">{formatCurrency(p.commissionable)}</div>
@@ -860,10 +802,8 @@ function SkuBreakdown({
                         );
                       })}
                     </div>
-                    {/* Account totals row */}
                     <div className="flex items-center px-4 py-2 border-t border-border bg-secondary/30 text-xs font-semibold">
                       <div className="flex-1">Total</div>
-                      <div className="w-14 hidden sm:block"></div>
                       <div className="w-28 text-right tnum">{formatCurrency(a.totalBilling)}</div>
                       <div className="w-32 text-right text-v-teal tnum">{formatCurrency(a.totalComm)}</div>
                       <div className="w-16 hidden md:block"></div>
@@ -875,6 +815,69 @@ function SkuBreakdown({
           );
         })}
       </div>
+
+      {/* ── Product rollup ── scaled to focusMonth */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-1.5">
+            <Package className="w-3.5 h-3.5 text-v-blue" />
+            By Product — {focusMonth}
+          </CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">
+            Each product's billing and commissionable scaled to {focusMonth} using each account's monthly totals · sorted by commissionable desc
+          </p>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-secondary/60 text-muted-foreground border-b border-border">
+                  <th className="text-left px-4 py-2.5 font-medium">Product</th>
+                  <th className="text-left px-4 py-2.5 font-medium hidden sm:table-cell">Category</th>
+                  <th className="text-right px-4 py-2.5 font-medium">Partners</th>
+                  <th className="text-right px-4 py-2.5 font-medium">Billings</th>
+                  <th className="text-right px-4 py-2.5 font-medium text-v-teal">Commissionable</th>
+                  <th className="text-right px-4 py-2.5 font-medium hidden md:table-cell">Incl. Rate</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {productRollup.map(p => {
+                  const pct = Math.round(p.inclRate * 100);
+                  return (
+                    <tr key={p.name} className="hover:bg-secondary/30">
+                      <td className="px-4 py-2.5 font-medium text-foreground">{p.name}</td>
+                      <td className="px-4 py-2.5 text-muted-foreground hidden sm:table-cell">{p.category}</td>
+                      <td className="px-4 py-2.5 text-right text-muted-foreground">{p.accountCount}</td>
+                      <td className="px-4 py-2.5 text-right font-medium tnum">{formatCurrency(p.billing)}</td>
+                      <td className="px-4 py-2.5 text-right font-bold text-v-teal tnum">{formatCurrency(p.commissionable)}</td>
+                      <td className="px-4 py-2.5 text-right hidden md:table-cell">
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                          p.billing === 0 ? "bg-secondary text-muted-foreground"
+                          : pct >= 90 ? "bg-v-teal/10 text-v-teal"
+                          : pct >= 40 ? "bg-v-amber/10 text-v-amber"
+                          : "bg-v-red/10 text-v-red"
+                        }`}>
+                          {p.billing > 0 ? `${pct}%` : "—"}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="bg-secondary/50 border-t-2 border-border font-semibold text-xs">
+                  <td className="px-4 py-2.5" colSpan={2}>Total ({productRollup.length} SKUs)</td>
+                  <td className="px-4 py-2.5 hidden sm:table-cell"></td>
+                  <td className="px-4 py-2.5 text-right tnum">{formatCurrency(totalBilling)}</td>
+                  <td className="px-4 py-2.5 text-right text-v-teal tnum">{formatCurrency(totalComm)}</td>
+                  <td className="px-4 py-2.5 hidden md:table-cell"></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
     </div>
   );
 }
