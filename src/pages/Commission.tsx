@@ -30,6 +30,7 @@ const FILTER_MONTHS = [
   { label: "Mar", week: "Mar 26", q: "Q1 '26" },
   { label: "Apr", week: "Apr 26", q: "Q2 '26" },
   { label: "May", week: "May 26", q: "Q2 '26" },
+  { label: "Jun", week: "Jun 26", q: "Q2 '26" },
 ] as const;
 
 type FilterWeek = typeof FILTER_MONTHS[number]["week"];
@@ -67,7 +68,7 @@ export default function Commission() {
   const navigate = useNavigate();
   const am = useAM();
   const [tab, setTab] = useState<"overview" | "sku">("overview");
-  const [focusMonth, setFocusMonth] = useState<FilterWeek>("May 26");
+  const [focusMonth, setFocusMonth] = useState<FilterWeek>("Jun 26");
   const { accounts, selectedAM } = am;
   // Non-null: pages render only after AMContext finishes loading (ProtectedRoute gate).
   const LIVE_META = am.liveMeta!;
