@@ -71,6 +71,27 @@ export function adjustedBilling(account: Account, week: string): number {
   return raw + billingAdjustment(account.name, week);
 }
 
+// Split commissionable for one month into USD and CAD buckets.
+// CAD partners (billingCurrency === "CAD") are already in Canadian dollars — no conversion needed.
+// USD partners need × USD_TO_CAD at payout time.
+export function monthlyCommissionableSplit(
+  accounts: Account[],
+  week: string,
+): { usd: number; cad: number } {
+  return accounts.reduce(
+    (acc, a) => {
+      const sheetComm = a.agid ? SHEET_COMM[a.agid]?.[week] : undefined;
+      const comm = sheetComm !== undefined
+        ? sheetComm
+        : (a.revenueHistory.find(h => h.week === week)?.mrr ?? 0) * blendedRate(a);
+      if (a.billingCurrency === "CAD") acc.cad += comm;
+      else acc.usd += comm;
+      return acc;
+    },
+    { usd: 0, cad: 0 },
+  );
+}
+
 // Blended commissionable rate from the product mix (billings × inclusion rate).
 export function blendedRate(account: Account): number {
   const bill = account.productBreakdown.reduce((s, p) => s + (p.mrr > 0 ? p.mrr : 0), 0);
@@ -171,8 +192,18 @@ export function computeQ2Outlook(accounts: Account[], amId: string): Q2Outlook {
 
   const tier = getCommissionTier(wamgrProjected);
   const nextTier = getNextCommissionTier(wamgrProjected);
+
+  // Payout split: CAD partners are already in CAD (no conversion); USD partners × 1.38.
+  const aprSplit = monthlyCommissionableSplit(eligible, "Apr 26");
+  const maySplit = monthlyCommissionableSplit(eligible, "May 26");
+  // Scale June estimate by each currency's share of May
+  const mayCreditFreeComm = monthlyCommissionableCreditFree(eligible, "May 26");
+  const junUSDEst = mayCreditFreeComm > 0 ? aprSplit.usd / aprComm * junCommEst : 0;
+  const junCADEst = junCommEst - junUSDEst;
+  const bookUSD = aprSplit.usd + maySplit.usd + junUSDEst;
+  const bookCAD = aprSplit.cad + maySplit.cad + junCADEst;
   const bookUnderManagement = aprComm + mayComm + junCommEst;
-  const bookGrowthCommissionCAD = tier.rate * bookUnderManagement * USD_TO_CAD;
+  const bookGrowthCommissionCAD = tier.rate * (bookUSD * USD_TO_CAD + bookCAD);
   const retentionBonusCAD = retentionBonus(Q1_RETENTION);
 
   const projNetGrowth = junCommEst - marComm;

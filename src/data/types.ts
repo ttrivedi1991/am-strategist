@@ -50,6 +50,7 @@ export interface Account {
   onboardedDate: string;
   revenueHistory: { week: string; mrr: number }[];
   agid?: string; // Vendasta vmf_account_group_id from dim_current_partner
+  billingCurrency?: "USD" | "CAD"; // defaults to USD; set CAD for partners billed in Canadian dollars
   mtdBilling?: { week: string; mrr: number }; // current-month billings through last business day
   // 2-sentence GTM context: (1) what the partner's business does and who their customers are,
   // (2) how Vendasta AI fits their GTM. Written in 2nd person, designed to open an outreach email.

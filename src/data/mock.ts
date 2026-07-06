@@ -170,9 +170,9 @@ export const ACCOUNTS: Account[] = [
     website: "uwm.com",
     notes: "Minimum monthly commitment of $41,400 (Enterprise 2026 plan) — billed flat regardless of usage volume. Social Marketing Pro (~$22.7K value) is bundled inside the commitment and carries $0 additional billing. Expansion math: product usage must exceed $41.4K before incremental dollars bill. isMIA flag reflects no formal meeting since Feb 2026 — not a churn signal, as billing is contractually guaranteed. Sarah DeCiantis (sdeciantis@uwm.com).",
     gtmContext: "UWM is the largest wholesale mortgage lender in the US, operating exclusively through a network of independent mortgage brokers who compete for referrals in local markets. Your brokers live on reputation — the ones managing their online presence consistently are generating more referral business, and AI-powered reputation management and Local SEO are the two tools that move that needle most directly.",
-    onboardedDate: "2026-02-01",
+    onboardedDate: "2026-01-01",
     revenueHistory: [
-      { week: "Nov 25", mrr: 0 }, { week: "Dec 25", mrr: 0 }, { week: "Jan 26", mrr: 0 }, { week: "Feb 26", mrr: 41423 }, { week: "Mar 26", mrr: 41400 }, { week: "Apr 26", mrr: 41400 }, { week: "May 26", mrr: 41400 },
+      { week: "Nov 25", mrr: 0 }, { week: "Dec 25", mrr: 0 }, { week: "Jan 26", mrr: 41400 }, { week: "Feb 26", mrr: 41423 }, { week: "Mar 26", mrr: 41400 }, { week: "Apr 26", mrr: 41400 }, { week: "May 26", mrr: 41400 },
     ],
   },
   {
@@ -195,11 +195,11 @@ export const ACCOUNTS: Account[] = [
     products: ["Reputation AI Premium"],
     productBreakdown: [{ name: "Custom Plan Subscription", category: "Vendasta Platform", mrr: 15000.0, commissionable: 14250.0 }, { name: "WordPress Hosting Premium", category: "Website", mrr: 65.0, commissionable: 32.5 }, { name: "Reputation AI Premium", category: "Reputation AI", mrr: 35.0, commissionable: 33.25 }, { name: "Social Marketing Pro", category: "Social", mrr: 15.0, commissionable: 14.25 }, { name: "Local SEO Pro", category: "SEO", mrr: 11.5, commissionable: 10.92 }],
     website: "smmarketinginternational.com",
-    notes: "First billing was April 2026 at $14.9K. Contact details TBD — look up IK5K in Vendasta CRM. No onboarding call yet. High priority given billing size.",
+    notes: "Assigned February 2026 — Q1 revenue ($15,000 Feb, $15,127 Mar) manually recognized in finance for payout; not in data warehouse. Contact details TBD — look up IK5K in Vendasta CRM.",
     isMIA: false,
-    onboardedDate: "2026-04-01",
+    onboardedDate: "2026-02-01",
     revenueHistory: [
-      { week: "Nov 25", mrr: 0 }, { week: "Dec 25", mrr: 0 }, { week: "Jan 26", mrr: 0 }, { week: "Feb 26", mrr: 0 }, { week: "Mar 26", mrr: 0 }, { week: "Apr 26", mrr: 14874 }, { week: "May 26", mrr: 15000 },
+      { week: "Nov 25", mrr: 0 }, { week: "Dec 25", mrr: 0 }, { week: "Jan 26", mrr: 0 }, { week: "Feb 26", mrr: 15000 }, { week: "Mar 26", mrr: 15127 }, { week: "Apr 26", mrr: 14874 }, { week: "May 26", mrr: 15000 },
     ],
   },
   {
@@ -513,6 +513,7 @@ export const ACCOUNTS: Account[] = [
     name: "Cantrex Nationwide",
     internalId: "P0QK",
     agid: "AG-GCRSZFJPNC",
+    billingCurrency: "CAD",
     contactName: "Pierre Leblanc",
     contactTitle: "Director of Digital",
     contactEmail: "pleblanc@cantrex.com",
@@ -3015,6 +3016,7 @@ export const ACCOUNTS: Account[] = [
     name: "Home.CA AI Inc.",
     internalId: "ZA8K",
     agid: "AG-6TSC7GJZCD",
+    billingCurrency: "CAD",
     contactName: "TBD — look up in CRM",
     contactTitle: "TBD — look up in CRM",
     contactEmail: "",
