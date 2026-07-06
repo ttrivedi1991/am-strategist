@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Header } from "@/components/layout/Header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -12,7 +13,8 @@ import {
 import { useNavigate } from "react-router-dom";
 import {
   TrendingUp, TrendingDown, Users, ArrowRight,
-  Flame, DollarSign, Target, AlertTriangle, BrainCircuit
+  Flame, DollarSign, Target, AlertTriangle, BrainCircuit,
+  ChevronDown, ChevronUp, Package,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -51,6 +53,7 @@ function getNextRetentionTier(pct: number) {
 export default function Commission() {
   const navigate = useNavigate();
   const am = useAM();
+  const [tab, setTab] = useState<"overview" | "sku">("overview");
   const { accounts, selectedAM } = am;
   // Non-null: pages render only after AMContext finishes loading (ProtectedRoute gate).
   const LIVE_META = am.liveMeta!;
@@ -206,7 +209,24 @@ export default function Commission() {
         subtitle={`Q2 2026 · Projected: ${formatCurrency(totalProjected)} · WAMGR ${(wamgrToDate * 100).toFixed(2)}% to date, ${(wamgrProjected * 100).toFixed(2)}% projected (${currentTier.label} tier) · Commissionable book: ${formatCurrency(bookUnderManagement)}`}
       />
 
-      <div className="p-6 space-y-6">
+      {/* Tab strip */}
+      <div className="px-6 pt-4 flex gap-1 border-b border-border">
+        {([["overview", "Overview"], ["sku", "By SKU"]] as const).map(([id, label]) => (
+          <button
+            key={id}
+            onClick={() => setTab(id)}
+            className={`px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 transition-colors ${
+              tab === id
+                ? "border-primary text-primary bg-background"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "overview" && <div className="p-6 space-y-6">
         {/* ── In-month standing (live) ── */}
         <div className="flex items-start gap-3 p-4 rounded-xl bg-v-blue/5 border border-v-blue/20">
           <DollarSign className="w-4 h-4 text-v-blue mt-0.5 shrink-0" />
@@ -555,6 +575,236 @@ export default function Commission() {
             )}
           </CardContent>
         </Card>
+      </div>}
+
+      {tab === "sku" && <SkuBreakdown accounts={accounts} onOutreach={id => navigate(`/outreach?account=${id}`)} />}
+    </div>
+  );
+}
+
+// ── By SKU tab ────────────────────────────────────────────────────────────────
+
+function SkuBreakdown({
+  accounts,
+  onOutreach,
+}: {
+  accounts: import("@/data/types").Account[];
+  onOutreach: (id: string) => void;
+}) {
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  // Aggregate all active SKUs across the book
+  const allSkus = accounts.flatMap(a =>
+    a.productBreakdown.filter(p => p.mrr > 0 || (p.quantity ?? 0) > 0).map(p => ({
+      ...p,
+      accountId: a.id,
+      accountName: a.name,
+    }))
+  );
+
+  // Roll up by product name
+  const productMap = new Map<string, { category: string; billing: number; commissionable: number; accountIds: Set<string> }>();
+  allSkus.forEach(p => {
+    if (!productMap.has(p.name)) {
+      productMap.set(p.name, { category: p.category, billing: 0, commissionable: 0, accountIds: new Set() });
+    }
+    const entry = productMap.get(p.name)!;
+    entry.billing += p.mrr;
+    entry.commissionable += p.commissionable;
+    if (p.mrr > 0) entry.accountIds.add(p.accountId);
+  });
+
+  const productRollup = [...productMap.entries()]
+    .map(([name, d]) => ({
+      name,
+      category: d.category,
+      billing: d.billing,
+      commissionable: d.commissionable,
+      accountCount: d.accountIds.size,
+      inclRate: d.billing > 0 ? d.commissionable / d.billing : 0,
+    }))
+    .sort((a, b) => b.commissionable - a.commissionable);
+
+  const totalProductBilling = productRollup.reduce((s, p) => s + p.billing, 0);
+  const totalProductComm = productRollup.reduce((s, p) => s + p.commissionable, 0);
+
+  // Per-account sorted by commissionable desc
+  const accountRows = accounts
+    .map(a => ({
+      id: a.id,
+      name: a.name,
+      skus: a.productBreakdown.filter(p => p.mrr > 0 || (p.quantity ?? 0) > 0).sort((x, y) => y.commissionable - x.commissionable),
+      totalBilling: a.productBreakdown.reduce((s, p) => s + (p.mrr > 0 ? p.mrr : 0), 0),
+      totalComm: a.productBreakdown.reduce((s, p) => s + (p.mrr > 0 ? p.commissionable : 0), 0),
+    }))
+    .filter(a => a.totalBilling > 0)
+    .sort((a, b) => b.totalComm - a.totalComm);
+
+  return (
+    <div className="p-6 space-y-6">
+
+      {/* ── Product rollup ── */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-1.5">
+            <Package className="w-3.5 h-3.5 text-v-blue" />
+            By Product — Aggregate Across Book
+          </CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">
+            Commissionable $ rolled up per SKU across all active partners · sorted by commissionable desc
+          </p>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-secondary/60 text-muted-foreground border-b border-border">
+                  <th className="text-left px-4 py-2.5 font-medium">Product</th>
+                  <th className="text-left px-4 py-2.5 font-medium hidden sm:table-cell">Category</th>
+                  <th className="text-right px-4 py-2.5 font-medium">Partners</th>
+                  <th className="text-right px-4 py-2.5 font-medium">Billings</th>
+                  <th className="text-right px-4 py-2.5 font-medium text-v-teal">Commissionable</th>
+                  <th className="text-right px-4 py-2.5 font-medium hidden md:table-cell">Incl. Rate</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {productRollup.map(p => {
+                  const pct = Math.round(p.inclRate * 100);
+                  return (
+                    <tr key={p.name} className="hover:bg-secondary/30">
+                      <td className="px-4 py-2.5 font-medium text-foreground">{p.name}</td>
+                      <td className="px-4 py-2.5 text-muted-foreground hidden sm:table-cell">{p.category}</td>
+                      <td className="px-4 py-2.5 text-right text-muted-foreground">{p.accountCount}</td>
+                      <td className="px-4 py-2.5 text-right font-medium tnum">{formatCurrency(p.billing)}</td>
+                      <td className="px-4 py-2.5 text-right font-bold text-v-teal tnum">{formatCurrency(p.commissionable)}</td>
+                      <td className="px-4 py-2.5 text-right hidden md:table-cell">
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                          p.billing === 0 ? "bg-secondary text-muted-foreground"
+                          : pct >= 90 ? "bg-v-teal/10 text-v-teal"
+                          : pct >= 40 ? "bg-v-amber/10 text-v-amber"
+                          : "bg-v-red/10 text-v-red"
+                        }`}>
+                          {p.billing > 0 ? `${pct}%` : "—"}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="bg-secondary/50 border-t-2 border-border font-semibold text-xs">
+                  <td className="px-4 py-2.5" colSpan={2}>Total ({productRollup.length} SKUs)</td>
+                  <td className="px-4 py-2.5 text-right text-muted-foreground hidden sm:table-cell"></td>
+                  <td className="px-4 py-2.5 text-right tnum">{formatCurrency(totalProductBilling)}</td>
+                  <td className="px-4 py-2.5 text-right text-v-teal tnum">{formatCurrency(totalProductComm)}</td>
+                  <td className="px-4 py-2.5 hidden md:table-cell"></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ── By account ── */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+            <Users className="w-3.5 h-3.5 text-muted-foreground" />
+            By Account — SKU Detail
+          </h2>
+          <span className="text-xs text-muted-foreground">sorted by commissionable $</span>
+        </div>
+
+        {accountRows.map(a => {
+          const isOpen = expanded === a.id;
+          return (
+            <Card key={a.id}>
+              <CardContent className="p-0">
+                <button
+                  onClick={() => setExpanded(isOpen ? null : a.id)}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-secondary/30 transition-colors group"
+                >
+                  <div className="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-3 gap-2 items-center">
+                    <p className="text-sm font-semibold text-foreground truncate">{a.name}</p>
+                    <div className="flex items-center gap-4">
+                      <div>
+                        <p className="text-[10px] text-muted-foreground">Billings</p>
+                        <p className="text-xs font-medium tnum">{formatCurrency(a.totalBilling)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-muted-foreground">Commissionable</p>
+                        <p className="text-xs font-bold text-v-teal tnum">{formatCurrency(a.totalComm)}</p>
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">{a.skus.length} SKU{a.skus.length !== 1 ? "s" : ""}</p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-xs h-7 px-2"
+                      onClick={e => { e.stopPropagation(); onOutreach(a.id); }}
+                    >
+                      Outreach <ArrowRight className="w-3 h-3" />
+                    </Button>
+                    {isOpen
+                      ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" />
+                      : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />}
+                  </div>
+                </button>
+
+                {isOpen && (
+                  <div className="border-t border-border">
+                    {/* Header */}
+                    <div className="flex items-center px-4 py-1.5 bg-secondary/40 text-[10px] font-semibold text-muted-foreground">
+                      <div className="flex-1">Product</div>
+                      <div className="w-14 text-right hidden sm:block">Qty</div>
+                      <div className="w-28 text-right">Billings</div>
+                      <div className="w-32 text-right">Commissionable</div>
+                      <div className="w-16 text-right hidden md:block">Incl. Rate</div>
+                    </div>
+                    <div className="divide-y divide-border">
+                      {a.skus.map(p => {
+                        const inclRate = p.mrr > 0 ? Math.round(p.commissionable / p.mrr * 100) : 0;
+                        return (
+                          <div key={p.name} className="flex items-center px-4 py-2 text-xs">
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium text-foreground truncate">{p.name}</p>
+                              {p.category && <p className="text-[10px] text-muted-foreground">{p.category}</p>}
+                            </div>
+                            <div className="w-14 text-right tnum text-muted-foreground hidden sm:block">
+                              {p.quantity != null ? p.quantity.toLocaleString() : "—"}
+                            </div>
+                            <div className="w-28 text-right font-semibold tnum">{formatCurrency(p.mrr)}</div>
+                            <div className="w-32 text-right font-semibold text-v-teal tnum">{formatCurrency(p.commissionable)}</div>
+                            <div className="w-16 text-right hidden md:block">
+                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                p.mrr === 0 ? "bg-secondary text-muted-foreground"
+                                : inclRate >= 90 ? "bg-v-teal/10 text-v-teal"
+                                : inclRate >= 40 ? "bg-v-amber/10 text-v-amber"
+                                : "bg-v-red/10 text-v-red"
+                              }`}>
+                                {p.mrr > 0 ? `${inclRate}%` : "free"}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {/* Account totals row */}
+                    <div className="flex items-center px-4 py-2 border-t border-border bg-secondary/30 text-xs font-semibold">
+                      <div className="flex-1">Total</div>
+                      <div className="w-14 hidden sm:block"></div>
+                      <div className="w-28 text-right tnum">{formatCurrency(a.totalBilling)}</div>
+                      <div className="w-32 text-right text-v-teal tnum">{formatCurrency(a.totalComm)}</div>
+                      <div className="w-16 hidden md:block"></div>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
     </div>
   );
