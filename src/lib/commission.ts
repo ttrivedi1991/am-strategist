@@ -1,9 +1,42 @@
 // Commission math per the Jan 2026 AM Channel Sales plan, shared by
-// Dashboard and Commission pages. Rates and tiers verified against the
-// official plan PDF and the Q1-2026 commission statement (Jun 11, 2026).
+// Dashboard and Commission pages.
+//
+// METHODOLOGY (verified against finance's Q2-2026 rep-wise payout sheet,
+// read 2026-07-14):
+//   Each quarter month has a cohort START (≈ prior month close, with small
+//   cohort adjustments finance makes for partner reassignments) and an END.
+//   Net Quarterly Growth = Σ (month end − month start)   ← telescopes to
+//                          ≈ quarter-final close − quarter-first start
+//   WAMGR                = Net Quarterly Growth ÷ Σ (month starts)
+//   Book growth payout   = tier rate × Σ (month ends) — USD portion × FX
+//   Logo retention       = avg of (month-end logos ÷ month-start logos), 3 months
+//
+// NOT (Q2 total − Q1 total) / Q1 total — the quarter-sum comparison this file
+// used before overstated Tanmay's Q2 at +0.52% when finance's actual was −0.24%.
 import type { Account } from "@/data/types";
 import { getLiveMeta, getAppData } from "@/data/store";
 import { SHEET_COMM } from "@/data/sheetComm";
+import { LIVE_COMM } from "@/data/live";
+
+// Monthly commissionable for one partner, best source first:
+//   1. SHEET_COMM — finance-published actuals (incl. post-close adjustments)
+//   2. LIVE_COMM  — warehouse SKU-level (total_reporting × comp-plan
+//      inclusion_rate; reconciles to finance closes within 0.2–0.5%)
+// Returns undefined when neither source covers the month — callers fall back
+// to billings × blended rate.
+function knownComm(account: Account, week: string): number | undefined {
+  if (!account.agid) return undefined;
+  return SHEET_COMM[account.agid]?.[week] ?? LIVE_COMM[account.agid]?.[week];
+}
+
+// ── Quarter config — the one place to roll forward each quarter ─────────────
+export const QUARTER = {
+  label: "Q3 2026",
+  months: ["Jul 26", "Aug 26", "Sep 26"],
+  monthNames: ["July", "August", "September"],
+  baselineWeek: "Jun 26",        // prior-quarter close = Month 1 cohort start
+  newSignCutoff: "2026-07-01",   // partners signed on/after are excluded from growth
+};
 
 export const COMMISSION_TIERS = [
   { wamgr: 0.0000, rate: 0.0060, label: "0.00%" },
@@ -16,7 +49,7 @@ export const COMMISSION_TIERS = [
 ];
 
 // Negative growth pays 0% — only WAMGR >= 0.00% reaches the first tier
-// (confirmed by the Q1-2026 statement: -0.12% growth → 0.00% rate → $0).
+// (confirmed by both the Q1 statement and the Q2 payout sheet).
 export const NEGATIVE_TIER = { wamgr: -1, rate: 0, label: "negative" };
 
 export function getCommissionTier(wamgr: number) {
@@ -37,29 +70,98 @@ export function getNextCommissionTier(wamgr: number) {
   return null;
 }
 
-// Logo retention bonus (flat quarterly payout, CAD)
+// Logo retention bonus (flat quarterly payout, CAD). pct on a 0–100 scale.
 export const RETENTION_TIERS = [
   { pct: 95, payout: 900 }, { pct: 96, payout: 1350 }, { pct: 97, payout: 1800 },
   { pct: 98, payout: 2250 }, { pct: 99, payout: 2813 }, { pct: 100, payout: 3375 },
 ];
-export const Q1_RETENTION = 97.09; // from the Q1-2026 commission statement
-export const USD_TO_CAD = 1.38;    // FX on the Q1-2026 statement
+
+// FX applied by finance on the Q2-2026 payout sheet (was 1.38 on the Q1 statement).
+export const USD_TO_CAD = 1.4;
+
+export function getRetentionTier(pct: number) {
+  let current = { pct: 0, payout: 0 };
+  for (const t of RETENTION_TIERS) {
+    if (pct >= t.pct) current = t;
+    else break;
+  }
+  return current;
+}
+
+export function getNextRetentionTier(pct: number) {
+  for (const t of RETENTION_TIERS) if (pct < t.pct) return t;
+  return null;
+}
 
 export function retentionBonus(pct: number): number {
-  let payout = 0;
-  for (const t of RETENTION_TIERS) if (pct >= t.pct) payout = t.payout;
-  return payout;
+  return getRetentionTier(pct).payout;
 }
+
+// ── Finance-verified prior-quarter finals (Q2-2026 rep-wise payout sheet) ───
+// These are the official cohort start/end values finance paid on. Month 1's
+// start for the CURRENT quarter is anchored to the prior quarter's final
+// month-end so the dashboard always agrees with finance's baseline.
+export interface FinalMonth {
+  week: string;
+  start: number;       // cohort start-of-month commissionable
+  end: number;         // cohort end-of-month commissionable
+  logosStart: number;
+  logosEnd: number;
+}
+export interface QuarterFinal {
+  quarter: string;
+  months: FinalMonth[];
+  adjustedBook: number;          // Σ month starts — the WAMGR denominator
+  bookUnderManagement: number;   // Σ month ends — the payout base
+  netQuarterlyGrowth: number;
+  wamgr: number;
+  rate: number;
+  retentionPct: number;
+  retentionBonusCAD: number;
+  fx: number;
+  totalCAD: number;
+}
+
+export const PRIOR_QUARTER_FINAL: Record<string, QuarterFinal> = {
+  tanmay: {
+    quarter: "Q2 2026",
+    months: [
+      { week: "Apr 26", start: 267297, end: 283079, logosStart: 32, logosEnd: 31 },
+      { week: "May 26", start: 283079, end: 246422, logosStart: 32, logosEnd: 32 },
+      { week: "Jun 26", start: 246420, end: 265407, logosStart: 33, logosEnd: 33 },
+    ],
+    adjustedBook: 796795,
+    bookUnderManagement: 794909,
+    netQuarterlyGrowth: -1886,
+    wamgr: -0.0024,
+    rate: 0,
+    retentionPct: 98.97,
+    retentionBonusCAD: 2250,
+    fx: 1.4,
+    totalCAD: 2250,
+  },
+  adam: {
+    quarter: "Q2 2026",
+    months: [
+      { week: "Apr 26", start: 192635, end: 177389, logosStart: 35, logosEnd: 35 },
+      { week: "May 26", start: 177388, end: 207014, logosStart: 33, logosEnd: 33 },
+      { week: "Jun 26", start: 207014, end: 238179, logosStart: 35, logosEnd: 34 },
+    ],
+    adjustedBook: 577037,
+    bookUnderManagement: 622582,
+    netQuarterlyGrowth: 45546,
+    wamgr: 0.0789,
+    rate: 0.03,
+    retentionPct: 99.03,
+    retentionBonusCAD: 2813,
+    fx: 1.4,
+    totalCAD: 28961.46,
+  },
+};
 
 // One-time billing artifacts (loaded from Firestore — they name a partner and
 // credit note, so they're confidential and never bundled). NOT applied to
-// official monthly numbers — those stay raw, matching the HOS dashboard and
-// finance's pipeline (credits count in the month they land; any payout
-// adjustment is finance's discretion). Because Net Quarterly Growth telescopes
-// to (Jun close − Mar close), an intra-quarter overcharge and its reversing
-// credit cancel out of Q2 WAMGR on their own; the only place the artifact
-// distorts is a projection anchored on the affected month — so these are used
-// solely to build a clean base for the in-progress-month estimate.
+// official monthly numbers — those stay raw, matching finance's pipeline.
 export function billingAdjustment(accountName: string, week: string): number {
   return getAppData().billingAdjustments
     .filter(a => a.account === accountName && a.week === week)
@@ -80,9 +182,9 @@ export function monthlyCommissionableSplit(
 ): { usd: number; cad: number } {
   return accounts.reduce(
     (acc, a) => {
-      const sheetComm = a.agid ? SHEET_COMM[a.agid]?.[week] : undefined;
-      const comm = sheetComm !== undefined
-        ? sheetComm
+      const known = knownComm(a, week);
+      const comm = known !== undefined
+        ? known
         : (a.revenueHistory.find(h => h.week === week)?.mrr ?? 0) * blendedRate(a);
       if (a.billingCurrency === "CAD") acc.cad += comm;
       else acc.usd += comm;
@@ -105,41 +207,32 @@ function onboardingComm(account: Account): number {
     .reduce((s, p) => s + p.commissionable, 0);
 }
 
-// Partners eligible for Q2 growth math: billing, and not newly signed in-quarter.
-export function q2EligiblePartners(accounts: Account[]): Account[] {
-  return accounts.filter(a => a.mrr > 0 && new Date(a.onboardedDate) < new Date("2026-04-01"));
+// Partners eligible for the current quarter's growth math: billing, and not
+// newly signed in-quarter (finance excludes those from the growth cohort).
+export function quarterEligiblePartners(accounts: Account[]): Account[] {
+  return accounts.filter(a =>
+    new Date(a.onboardedDate) < new Date(QUARTER.newSignCutoff) &&
+    (a.mrr > 0 ||
+      (a.revenueHistory.find(h => h.week === QUARTER.baselineWeek)?.mrr ?? 0) > 0 ||
+      (a.mtdBilling?.mrr ?? 0) > 0)
+  );
 }
 
-// Commissionable dollars for one month. Uses finance-sheet actuals (SHEET_COMM)
-// when available for a partner — these include post-close manual adjustments and
-// are keyed by SKU-level inclusion rate rather than a blended estimate.
-// Falls back to raw billings × blended rate for partners/months not in the sheet.
+// Commissionable dollars for one month. Uses finance actuals, then warehouse
+// SKU-level values (see knownComm), then raw billings × blended rate.
 export function monthlyCommissionable(accounts: Account[], week: string): number {
   return accounts.reduce((s, a) => {
-    const sheetComm = a.agid ? SHEET_COMM[a.agid]?.[week] : undefined;
-    if (sheetComm !== undefined) return s + sheetComm;
+    const known = knownComm(a, week);
+    if (known !== undefined) return s + known;
     return s + (a.revenueHistory.find(h => h.week === week)?.mrr ?? 0) * blendedRate(a) - onboardingComm(a);
   }, 0);
 }
 
-// Same, with one-time credits reversed — used ONLY as the June projection anchor.
-// For partners with sheet actuals, adds back the commissionable-equivalent of any
-// credit adjustments so the projection isn't anchored on a credit-depressed month.
-function monthlyCommissionableCreditFree(accounts: Account[], week: string): number {
-  return accounts.reduce((s, a) => {
-    const sheetComm = a.agid ? SHEET_COMM[a.agid]?.[week] : undefined;
-    if (sheetComm !== undefined) {
-      return s + sheetComm + billingAdjustment(a.name, week) * blendedRate(a);
-    }
-    return s + adjustedBilling(a, week) * blendedRate(a) - onboardingComm(a);
-  }, 0);
-}
-
-// Per-account commissionable for one month (uses SHEET_COMM actuals where
-// available, falls back to revenueHistory billing × blended rate).
+// Per-account commissionable for one month (finance actuals, then warehouse
+// SKU-level, then revenueHistory billing × blended rate).
 export function accountMonthlyCommissionable(account: Account, week: string): number {
-  const sheetComm = account.agid ? SHEET_COMM[account.agid]?.[week] : undefined;
-  if (sheetComm !== undefined) return sheetComm;
+  const known = knownComm(account, week);
+  if (known !== undefined) return known;
   const billing = account.revenueHistory.find(h => h.week === week)?.mrr ?? 0;
   return billing * blendedRate(account);
 }
@@ -162,8 +255,7 @@ export function mtdPaceFactor(amId: string): number {
 }
 
 // Returns true when SHEET_COMM actuals cover ≥80% of the commissionable book
-// for the given month. When true, the result of monthlyCommissionable() for
-// that month is finance-approved and should NOT be labelled as a projection.
+// for the given month — i.e. finance has published that month's close.
 function isMonthActual(accounts: Account[], week: string): boolean {
   const sheetTotal = accounts.reduce((s, a) => {
     const v = a.agid ? SHEET_COMM[a.agid]?.[week] : undefined;
@@ -173,87 +265,178 @@ function isMonthActual(accounts: Account[], week: string): boolean {
   return total > 0 && sheetTotal / total >= 0.8;
 }
 
-export interface Q2Outlook {
-  janComm: number; febComm: number;
-  marComm: number; aprComm: number; mayComm: number; junCommEst: number;
-  junIsActual: boolean;    // true when June is finance-approved (SHEET_COMM ≥80% of book)
-  q1Sum: number;           // Jan + Feb + Mar (Q1 total commissionable)
-  q2Sum: number;           // Apr + May + Jun (Q2 total commissionable)
-  wamgrToDate: number;     // partial QoQ using matched months (Apr+May vs Jan+Feb)
-  wamgrProjected: number;  // full QoQ WAMGR: (Q2 − Q1) / Q1
+// ── Quarter outlook — the finance-sheet model ────────────────────────────────
+
+export interface QuarterMonth {
+  week: string;   // "Jul 26"
+  name: string;   // "July"
+  start: number;  // cohort start (chained from prior month's end)
+  end: number;    // close (actual) or projection
+  diff: number;
+  // final: finance-published · closed: month over, warehouse numbers ·
+  // inProgress: projected at in-month pace · assumed: future month held flat
+  status: "final" | "closed" | "inProgress" | "assumed";
+}
+
+export interface TierTarget {
+  wamgr: number;
+  rate: number;
+  label: string;
+  netGrowthNeeded: number;      // NQG dollars needed to reach this tier
+  quarterCloseNeeded: number;   // final-month close needed (growth telescopes)
+  gapFromProjection: number;    // vs projected NQG; ≤0 means already on track
+  estPayoutCAD: number;         // rate × current projected book (approximate)
+}
+
+export interface QuarterOutlook {
+  quarter: string;
+  months: QuarterMonth[];
+  // Month 1 start anchored to finance's verified prior-quarter close when we
+  // have it; delta = warehouse baseline sum − finance close (data drift).
+  baselineIsFinal: boolean;
+  baselineWarehouseDelta: number;
+  adjustedBook: number;           // Σ month starts — WAMGR denominator
+  bookUnderManagement: number;    // Σ month ends — payout base
+  netQuarterlyGrowth: number;     // Σ month diffs ≈ final close − Month 1 start
+  wamgr: number;
   tier: ReturnType<typeof getCommissionTier>;
   nextTier: ReturnType<typeof getNextCommissionTier>;
-  bookUnderManagement: number;             // Q2 total commissionable (Apr + May + Jun)
-  bookUSD: number;                         // USD-denominated commissionable across Apr–Jun
-  bookCAD: number;                         // CAD-denominated commissionable across Apr–Jun
-  bookGrowthCommissionCAD: number;         // tier rate × (bookUSD × 1.38 + bookCAD), in CAD
-  retentionBonusCAD: number;               // estimated at Q1's retention
+  bookUSD: number;
+  bookCAD: number;
+  bookGrowthCommissionCAD: number;   // tier rate × (bookUSD × FX + bookCAD)
+  cohortSize: number;                // logos at Month 1 start
+  retentionPct: number;              // 0–100; assumes no further cancellations
+  retentionBonusCAD: number;
+  retentionOneLossPct: number;       // sensitivity: one cancellation this quarter
+  retentionOneLossBonusCAD: number;
   projectedCommissionCAD: number;
-  gapToNextTier: number;                   // additional Q2 commissionable needed to reach next tier
+  gapToNextTier: number;             // additional net growth $ to reach next tier
+  nextTierUpliftCAD: number;         // payout delta if next tier is reached
+  tierTargets: TierTarget[];
   paceFactor: number;
 }
 
-export function computeQ2Outlook(accounts: Account[], amId: string): Q2Outlook {
-  const eligible = q2EligiblePartners(accounts);
-  const janComm = monthlyCommissionable(eligible, "Jan 26");
-  const febComm = monthlyCommissionable(eligible, "Feb 26");
-  const marComm = monthlyCommissionable(eligible, "Mar 26");
-  const aprComm = monthlyCommissionable(eligible, "Apr 26");
-  const mayComm = monthlyCommissionable(eligible, "May 26");
+export function computeQuarterOutlook(accounts: Account[], amId: string): QuarterOutlook {
+  const eligible = quarterEligiblePartners(accounts);
   const paceFactor = mtdPaceFactor(amId);
+  const mtdLabel = getLiveMeta().mtdLabel;
+  const currentIdx = QUARTER.months.indexOf(mtdLabel); // -1 once the quarter is fully closed
 
-  // Use finance-approved SHEET_COMM actuals for June when they cover ≥80% of
-  // the book. Otherwise fall back to the credit-free May × pace projection.
-  const junIsActual = isMonthActual(eligible, "Jun 26");
-  const junCommEst = junIsActual
-    ? monthlyCommissionable(eligible, "Jun 26")
-    : monthlyCommissionableCreditFree(eligible, "May 26") * paceFactor;
+  // Month 1 cohort start = prior-quarter close. Prefer finance's verified
+  // number (the payout sheet) over the warehouse sum — June's warehouse data
+  // carries one-time invoice items finance excludes from the growth basis.
+  const final = PRIOR_QUARTER_FINAL[amId];
+  const warehouseBaseline = monthlyCommissionable(eligible, QUARTER.baselineWeek);
+  const financeBaseline = final?.months[final.months.length - 1]?.end;
+  const m1Start = financeBaseline ?? warehouseBaseline;
+  const baselineIsFinal = financeBaseline !== undefined;
+  const baselineWarehouseDelta = warehouseBaseline - m1Start;
 
-  // True QoQ WAMGR: compare total Q2 commissionable to total Q1 commissionable.
-  // This matches the commission plan basis ("QoQ growth") and the finance sheet.
-  const q1Sum = janComm + febComm + marComm;
-  const q2Sum = aprComm + mayComm + junCommEst;
-  const wamgrProjected = q1Sum > 0 ? (q2Sum - q1Sum) / q1Sum : 0;
+  const months: QuarterMonth[] = [];
+  let prevEnd = m1Start;
+  QUARTER.months.forEach((week, i) => {
+    const start = prevEnd;
+    let end: number;
+    let status: QuarterMonth["status"];
+    if (isMonthActual(eligible, week)) {
+      end = monthlyCommissionable(eligible, week);
+      status = "final";
+    } else if (currentIdx !== -1 && i < currentIdx) {
+      end = monthlyCommissionable(eligible, week);
+      status = "closed";
+    } else if (i === currentIdx) {
+      end = start * paceFactor;
+      status = "inProgress";
+    } else {
+      end = start; // hold flat — no signal yet for future months
+      status = "assumed";
+    }
+    months.push({ week, name: QUARTER.monthNames[i], start, end, diff: end - start, status });
+    prevEnd = end;
+  });
 
-  // Partial "to date" view: compare matched months (Apr+May vs Jan+Feb).
-  // When June is actual the full QoQ is known, so to-date equals projected.
-  const wamgrToDate = junIsActual
-    ? wamgrProjected
-    : janComm + febComm > 0 ? (aprComm + mayComm - janComm - febComm) / (janComm + febComm) : 0;
+  const adjustedBook = months.reduce((s, m) => s + m.start, 0);
+  const bookUnderManagement = months.reduce((s, m) => s + m.end, 0);
+  const netQuarterlyGrowth = months.reduce((s, m) => s + m.diff, 0);
+  const wamgr = adjustedBook > 0 ? netQuarterlyGrowth / adjustedBook : 0;
 
-  const tier = getCommissionTier(wamgrProjected);
-  const nextTier = getNextCommissionTier(wamgrProjected);
+  const tier = getCommissionTier(wamgr);
+  const nextTier = getNextCommissionTier(wamgr);
 
-  // Payout split: CAD partners are already in CAD (no conversion); USD partners × 1.38.
-  const aprSplit = monthlyCommissionableSplit(eligible, "Apr 26");
-  const maySplit = monthlyCommissionableSplit(eligible, "May 26");
-  // When June is actual use the real currency split; otherwise scale from May's mix.
-  let junUSD: number, junCAD: number;
-  if (junIsActual) {
-    const junSplit = monthlyCommissionableSplit(eligible, "Jun 26");
-    junUSD = junSplit.usd;
-    junCAD = junSplit.cad;
-  } else {
-    const mayCreditFreeComm = monthlyCommissionableCreditFree(eligible, "May 26");
-    junUSD = mayCreditFreeComm > 0 ? aprSplit.usd / aprComm * junCommEst : 0;
-    junCAD = junCommEst - junUSD;
+  // Currency split: real split for finance-published months; projected months
+  // inherit the baseline month's CAD share (Cantrex + Home.CA bill in CAD).
+  const baseSplit = monthlyCommissionableSplit(eligible, QUARTER.baselineWeek);
+  const baseCadShare = baseSplit.usd + baseSplit.cad > 0
+    ? baseSplit.cad / (baseSplit.usd + baseSplit.cad) : 0;
+  let bookUSD = 0, bookCAD = 0;
+  for (const m of months) {
+    if (m.status === "final" || m.status === "closed") {
+      const split = monthlyCommissionableSplit(eligible, m.week);
+      bookUSD += split.usd;
+      bookCAD += split.cad;
+    } else {
+      bookCAD += m.end * baseCadShare;
+      bookUSD += m.end * (1 - baseCadShare);
+    }
   }
-  const bookUSD = aprSplit.usd + maySplit.usd + junUSD;
-  const bookCAD = aprSplit.cad + maySplit.cad + junCAD;
-  const bookUnderManagement = q2Sum;
   const bookGrowthCommissionCAD = tier.rate * (bookUSD * USD_TO_CAD + bookCAD);
-  const retentionBonusCAD = retentionBonus(Q1_RETENTION);
 
-  // Gap: how much more Q2 total is needed to hit the next tier threshold.
-  const gapToNextTier = nextTier ? Math.max(0, (1 + nextTier.wamgr) * q1Sum - q2Sum) : 0;
+  // Logo retention: month-end logos ÷ month-start logos, averaged. Months
+  // without a published close assume no cancellations; the one-loss line shows
+  // what a single cancellation does to the bonus.
+  const countActive = (week: string) =>
+    eligible.filter(a => (a.revenueHistory.find(h => h.week === week)?.mrr ?? 0) > 0).length;
+  const cohortSize = countActive(QUARTER.baselineWeek);
+  let retentionSum = 0;
+  let prevCount = cohortSize;
+  for (const m of months) {
+    if ((m.status === "final" || m.status === "closed") && prevCount > 0) {
+      const endCount = countActive(m.week);
+      retentionSum += Math.min(endCount / prevCount, 1);
+      prevCount = endCount;
+    } else {
+      retentionSum += 1; // assume no cancellations in unpublished months
+    }
+  }
+  const retentionPct = (retentionSum / months.length) * 100;
+  const retentionBonusCAD = retentionBonus(retentionPct);
+  const retentionOneLossPct = cohortSize > 0
+    ? ((retentionSum - 1 + (cohortSize - 1) / cohortSize) / months.length) * 100
+    : retentionPct;
+  const retentionOneLossBonusCAD = retentionBonus(retentionOneLossPct);
+
+  // Tier targets: net growth needed for each tier, and the quarter close that
+  // implies (growth telescopes to final close − Month 1 start, before finance's
+  // small cohort adjustments).
+  const tierTargets: TierTarget[] = COMMISSION_TIERS.map(t => {
+    const netGrowthNeeded = t.wamgr * adjustedBook;
+    return {
+      ...t,
+      netGrowthNeeded,
+      quarterCloseNeeded: m1Start + netGrowthNeeded,
+      gapFromProjection: netGrowthNeeded - netQuarterlyGrowth,
+      estPayoutCAD: t.rate * (bookUSD * USD_TO_CAD + bookCAD),
+    };
+  });
+
+  const gapToNextTier = nextTier
+    ? Math.max(0, nextTier.wamgr * adjustedBook - netQuarterlyGrowth)
+    : 0;
+  const nextTierUpliftCAD = nextTier
+    ? (nextTier.rate - tier.rate) * (bookUSD * USD_TO_CAD + bookCAD)
+    : 0;
 
   return {
-    janComm, febComm, marComm, aprComm, mayComm, junCommEst, junIsActual,
-    q1Sum, q2Sum,
-    wamgrToDate, wamgrProjected, tier, nextTier,
-    bookUnderManagement, bookUSD, bookCAD,
-    bookGrowthCommissionCAD, retentionBonusCAD,
+    quarter: QUARTER.label,
+    months,
+    baselineIsFinal, baselineWarehouseDelta,
+    adjustedBook, bookUnderManagement, netQuarterlyGrowth, wamgr,
+    tier, nextTier,
+    bookUSD, bookCAD, bookGrowthCommissionCAD,
+    cohortSize, retentionPct, retentionBonusCAD,
+    retentionOneLossPct, retentionOneLossBonusCAD,
     projectedCommissionCAD: bookGrowthCommissionCAD + retentionBonusCAD,
-    gapToNextTier, paceFactor,
+    gapToNextTier, nextTierUpliftCAD,
+    tierTargets, paceFactor,
   };
 }

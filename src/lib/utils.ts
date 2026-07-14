@@ -24,13 +24,13 @@ export function pctChange(current: number, previous: number): number {
   return Math.round(((current - previous) / previous) * 100);
 }
 
-// QoQ baseline = prior-quarter close (Mar 2026 for Q2). The commission plan
+// QoQ baseline = prior-quarter close (Jun 2026 for Q3). The commission plan
 // measures quarterly growth as monthly deltas summed, which telescopes to
 // current close − prior-quarter close. Looks up by label so it's robust to
 // array length changes.
-export const QOQ_BASELINE_LABEL = "Mar 2026";
+export const QOQ_BASELINE_LABEL = "Jun 2026";
 export function getQoQBaseMRR(history: { week: string; mrr: number }[]): number {
-  return history.find(h => h.week === "Mar 26")?.mrr ?? history[4]?.mrr ?? 0;
+  return history.find(h => h.week === "Jun 26")?.mrr ?? history[history.length - 1]?.mrr ?? 0;
 }
 
 // Latest-month billings from the history array — single source of truth for

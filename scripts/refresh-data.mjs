@@ -241,6 +241,32 @@ for (const r of productQuery(currentMonthStart, "COUNT(DISTINCT s.customer_snk) 
 for (const list of Object.values(productsByAgid)) list.sort((a, b) => b.mrr - a.mrr);
 console.log(`product breakdown: ${Object.keys(productsByAgid).length} partners (+${appended} current-month-only SKUs)`);
 
+// ── 2d. Monthly commissionable per partner (SKU-level comp-plan rates) ──────
+// SUM(total_reporting × dim_current_product.inclusion_rate) — the same math
+// finance's rep-wise "Data" tab applies (revenue_reporting_net × inclusion_rate
+// per category). Validated against the Q2-2026 payout sheet: Apr/May/Jun book
+// closes reconcile within 0.2–0.5%. Full months only — the in-progress month
+// is handled by mtdCommissionable/pace. SHEET_COMM (finance actuals) still
+// overrides these values wherever finance has published a close.
+console.log("Pulling monthly commissionable (SKU-level rates) per partner…");
+const commRows = bq(`
+  SELECT p.vmf_account_group_id AS agid, CAST(d.date AS STRING) AS month,
+         ROUND(SUM(s.total_reporting * COALESCE(pr.inclusion_rate, 0)), 2) AS comm
+  FROM \`${PROJECT}.management.f_billing_partner_customer_product_snpm\` s
+  JOIN \`${PROJECT}.management.dim_date\` d ON s.projected_month_date_sk = d.date_sk
+  JOIN \`${PROJECT}.management.dim_current_partner\` p ON s.partner_snk = p.partner_snk
+  JOIN \`${PROJECT}.management.dim_current_user\` u ON s.assigned_sales_person_snk = u.user_snk
+  JOIN \`${PROJECT}.management.dim_current_product\` pr ON s.product_snk = pr.product_snk
+  WHERE u.work_email IN (${EMAILS_SQL})
+    AND d.date >= '${SERIES_START}' AND d.date < '${currentMonthStart}'
+  GROUP BY 1, 2`);
+const commByAgid = {};
+for (const r of commRows) {
+  if (!r.agid) continue;
+  (commByAgid[r.agid] ??= {})[monthLabel(r.month)] = Number(r.comm);
+}
+console.log(`monthly commissionable: ${Object.keys(commByAgid).length} partners`);
+
 const lastFullMonthEnd = iso(new Date(today.getFullYear(), today.getMonth(), 0));
 console.log("Pulling invoices + credit notes (last full month)…");
 const docsLastMonth = buildDocs(invoicePull(lastFullMonthStart, lastFullMonthEnd), lastFullMonthStart, null);
@@ -283,6 +309,14 @@ ${liveEntries.join("\n")}
 // product's comp-plan inclusion_rate. Sums reconcile to the partner's book.
 export const LIVE_PRODUCTS: Record<string, LiveProduct[]> = {
 ${Object.entries(productsByAgid).map(([agid, items]) => `  "${agid}": ${JSON.stringify(items)},`).join("\n")}
+};
+
+// Per-partner monthly commissionable at SKU-level comp-plan rates
+// (total_reporting × dim_current_product.inclusion_rate — same math as
+// finance's rep-wise Data tab; Q2-2026 closes reconcile within 0.2–0.5%).
+// Full months only. SHEET_COMM finance actuals override these at runtime.
+export const LIVE_COMM: Record<string, Record<string, number>> = {
+${Object.entries(commByAgid).map(([agid, m]) => `  "${agid}": ${JSON.stringify(m)},`).join("\n")}
 };
 `);
 console.log(`live.ts written: ${liveEntries.length} partners, ${Object.keys(productsByAgid).length} with product breakdown`);

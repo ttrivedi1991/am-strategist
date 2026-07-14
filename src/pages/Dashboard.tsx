@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatCurrency, formatMonthLabel, pctChange, getQoQBaseMRR, getLatestMRR, QOQ_BASELINE_LABEL } from "@/lib/utils";
-import { computeQ2Outlook, mtdCommissionable, monthlyCommissionable, billingAdjustment, Q1_RETENTION } from "@/lib/commission";
+import { computeQuarterOutlook, mtdCommissionable, monthlyCommissionable, billingAdjustment, QUARTER } from "@/lib/commission";
 
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -35,18 +35,19 @@ export default function Dashboard() {
   const latestMonth = latestTrend?.week ?? "May 26";
   const latestMonthLabel = formatMonthLabel(latestMonth); // "May 2026", never date-like
 
-  // Commission outlook (Q2 2026) — shared math in src/lib/commission.ts:
-  // one-time billing artifacts normalized for the projection; June at in-month pace.
-  const outlook = computeQ2Outlook(accounts, selectedAM.id);
-  const { wamgrToDate, wamgrProjected, tier: currentTier, nextTier, paceFactor } = outlook;
+  // Commission outlook — shared math in src/lib/commission.ts, following the
+  // finance payout-sheet model: monthly cohort start→end diffs; WAMGR = net
+  // quarterly growth ÷ Σ month starts; in-progress month projected at pace.
+  const outlook = computeQuarterOutlook(accounts, selectedAM.id);
+  const { wamgr, tier: currentTier, nextTier, paceFactor, netQuarterlyGrowth, months } = outlook;
   const pace = LIVE_META.mtdPaceByAm[selectedAM.id]; // per-AM pace for display
 
-  // QoQ: compare current month to the prior-quarter close (Mar 2026 for Q2)
+  // QoQ: compare current month to the prior-quarter close (Jun 2026 for Q3)
   const totalMRRQoQBase = accounts.reduce((s, a) => s + getQoQBaseMRR(a.revenueHistory), 0);
   const revenueChange = pctChange(totalMRR, totalMRRQoQBase);
   // Context view: same comparison excluding one-time billing credits (official numbers keep them)
   const latestAdj = accounts.reduce((s, a) => s + billingAdjustment(a.name, latestMonth), 0);
-  const baseAdj = accounts.reduce((s, a) => s + billingAdjustment(a.name, "Mar 26"), 0);
+  const baseAdj = accounts.reduce((s, a) => s + billingAdjustment(a.name, "Jun 26"), 0);
   const adjRevenueChange = pctChange(totalMRR + latestAdj, totalMRRQoQBase + baseAdj);
 
   // Month focus filter: defaults to the in-progress month (live MTD)
@@ -63,10 +64,10 @@ export default function Dashboard() {
     : accounts.reduce((s, a) => s + (a.revenueHistory.find(h => h.week === focusMonth)?.mrr ?? 0), 0);
   const focusComm = focusIsMTD ? mtdCommissionable(accounts) : monthlyCommissionable(accounts, focusMonth);
   const focusChange = focusIsMTD ? undefined : pctChange(focusBillings, totalMRRQoQBase);
-  const tierProgressPct = wamgrProjected < 0
+  const tierProgressPct = wamgr < 0
     ? 0
     : nextTier
-      ? Math.min(100, Math.round(((wamgrProjected - currentTier.wamgr) / (nextTier.wamgr - currentTier.wamgr)) * 100))
+      ? Math.min(100, Math.round(((wamgr - currentTier.wamgr) / (nextTier.wamgr - currentTier.wamgr)) * 100))
       : 100;
 
   return (
@@ -175,7 +176,7 @@ export default function Dashboard() {
           <StatCard
             label={`Commissionable $ (${focusLabel})`}
             value={formatCurrency(focusComm)}
-            changeLabel={`Q2 book under management: ${formatCurrency(outlook.bookUnderManagement)}`}
+            changeLabel={`${QUARTER.label} book under management: ${formatCurrency(outlook.bookUnderManagement)}`}
             icon={DollarSign}
             iconColor="text-v-teal"
             onClick={() => navigate("/commission")}
@@ -184,11 +185,11 @@ export default function Dashboard() {
             <CardContent className="p-4">
               <div className="flex items-center gap-2 mb-1">
                 <AlertTriangle className="w-3.5 h-3.5 text-v-amber" />
-                <p className="text-xs font-medium text-muted-foreground">Gap to Next Tier (Q2)</p>
+                <p className="text-xs font-medium text-muted-foreground">Gap to Next Tier ({QUARTER.label})</p>
               </div>
               <p className="text-2xl font-bold text-v-amber">{nextTier ? formatCurrency(outlook.gapToNextTier) : "At max"}</p>
               <p className="text-[10px] text-muted-foreground mt-1">
-                {nextTier ? `Grow commissionable to hit ${nextTier.label} WAMGR` : "You're at the highest tier!"}
+                {nextTier ? `Net growth needed by Sep close to hit ${nextTier.label} WAMGR` : "You're at the highest tier!"}
               </p>
             </CardContent>
           </Card>
@@ -230,11 +231,11 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          {/* Q2 Commission Outlook — per the Jan 2026 commission plan */}
+          {/* Quarter Commission Outlook — finance payout-sheet model */}
           <Card>
             <CardHeader>
-              <CardTitle>Q2 Commission Outlook</CardTitle>
-              <p className="text-xs text-muted-foreground">Per Jan 2026 plan · official billings (credits included) · Jun projected from credit-free May at {(paceFactor * 100).toFixed(0)}% pace</p>
+              <CardTitle>{QUARTER.label} Commission Outlook</CardTitle>
+              <p className="text-xs text-muted-foreground">Finance model: net growth ÷ Σ month starts · July start anchored to verified Q2 close · July projected at {(paceFactor * 100).toFixed(0)}% pace</p>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex flex-col items-center py-2">
@@ -244,7 +245,7 @@ export default function Dashboard() {
                     <path
                       d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                       fill="none"
-                      stroke={wamgrProjected >= 0 ? "#00B67A" : "#EF4444"}
+                      stroke={wamgr >= 0 ? "#00B67A" : "#EF4444"}
                       strokeWidth="3"
                       strokeDasharray={`${Math.max(tierProgressPct, 2)}, 100`}
                       strokeLinecap="round"
@@ -258,27 +259,27 @@ export default function Dashboard() {
               </div>
               <div className="space-y-2">
                 <div className="flex justify-between text-xs">
-                  <span className="text-muted-foreground">WAMGR (Q2 to date)</span>
-                  <span className={`font-medium ${wamgrToDate < 0 ? "text-v-red" : "text-v-green"}`}>{(wamgrToDate * 100).toFixed(2)}%</span>
+                  <span className="text-muted-foreground">WAMGR (projected)</span>
+                  <span className={`font-medium ${wamgr < 0 ? "text-v-red" : "text-v-green"}`}>{(wamgr * 100).toFixed(2)}%</span>
                 </div>
                 <div className="flex justify-between text-xs">
-                  <span className="text-muted-foreground">WAMGR (proj., Jun at pace)</span>
-                  <span className={`font-medium ${wamgrProjected < 0 ? "text-v-red" : "text-v-green"}`}>{(wamgrProjected * 100).toFixed(2)}%</span>
+                  <span className="text-muted-foreground">Net quarterly growth</span>
+                  <span className={`font-medium ${netQuarterlyGrowth < 0 ? "text-v-red" : "text-v-green"}`}>{netQuarterlyGrowth >= 0 ? "+" : ""}{formatCurrency(netQuarterlyGrowth)}</span>
                 </div>
                 <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground">Eligible rate</span>
-                  <span className="font-medium">{(currentTier.rate * 100).toFixed(2)}%{wamgrProjected < 0 && " (negative growth)"}</span>
+                  <span className="font-medium">{(currentTier.rate * 100).toFixed(2)}%{wamgr < 0 && " (negative growth)"}</span>
                 </div>
                 <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground">Book growth commission</span>
                   <span className="font-medium">{formatCurrency(outlook.bookGrowthCommissionCAD)}</span>
                 </div>
                 <div className="flex justify-between text-xs">
-                  <span className="text-muted-foreground">Retention bonus (est. at Q1's {Q1_RETENTION.toFixed(1)}%)</span>
+                  <span className="text-muted-foreground">Retention bonus (at {outlook.retentionPct.toFixed(1)}%, no cancellations)</span>
                   <span className="font-medium">{formatCurrency(outlook.retentionBonusCAD)}</span>
                 </div>
                 <p className="text-[10px] text-muted-foreground pt-1 border-t border-border">
-                  To-date WAMGR carries a one-time May billing credit that reverses an April overcharge. Quarterly growth telescopes to Jun − Mar close, so the wash cancels out by quarter end.
+                  Quarterly growth telescopes to September close − July start ({formatCurrency(months[0].start)}, finance-verified). Close September above the start and the growth component pays.
                 </p>
               </div>
               <Button variant="outline" size="sm" className="w-full" onClick={() => navigate("/commission")}>
