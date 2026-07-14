@@ -161,34 +161,65 @@ export function mtdPaceFactor(amId: string): number {
   return p && p.priorSameSpan > 0 ? p.current / p.priorSameSpan : 1;
 }
 
+// Returns true when SHEET_COMM actuals cover ≥80% of the commissionable book
+// for the given month. When true, the result of monthlyCommissionable() for
+// that month is finance-approved and should NOT be labelled as a projection.
+function isMonthActual(accounts: Account[], week: string): boolean {
+  const sheetTotal = accounts.reduce((s, a) => {
+    const v = a.agid ? SHEET_COMM[a.agid]?.[week] : undefined;
+    return s + (v ?? 0);
+  }, 0);
+  const total = monthlyCommissionable(accounts, week);
+  return total > 0 && sheetTotal / total >= 0.8;
+}
+
 export interface Q2Outlook {
+  janComm: number; febComm: number;
   marComm: number; aprComm: number; mayComm: number; junCommEst: number;
-  wamgrToDate: number;     // Apr + May actuals only
-  wamgrProjected: number;  // June estimated at the current in-month pace
+  junIsActual: boolean;    // true when June is finance-approved (SHEET_COMM ≥80% of book)
+  q1Sum: number;           // Jan + Feb + Mar (Q1 total commissionable)
+  q2Sum: number;           // Apr + May + Jun (Q2 total commissionable)
+  wamgrToDate: number;     // partial QoQ using matched months (Apr+May vs Jan+Feb)
+  wamgrProjected: number;  // full QoQ WAMGR: (Q2 − Q1) / Q1
   tier: ReturnType<typeof getCommissionTier>;
   nextTier: ReturnType<typeof getNextCommissionTier>;
-  bookUnderManagement: number;             // Apr + May + Jun est
-  bookGrowthCommissionCAD: number;         // tier rate × book, in CAD
+  bookUnderManagement: number;             // Q2 total commissionable (Apr + May + Jun)
+  bookUSD: number;                         // USD-denominated commissionable across Apr–Jun
+  bookCAD: number;                         // CAD-denominated commissionable across Apr–Jun
+  bookGrowthCommissionCAD: number;         // tier rate × (bookUSD × 1.38 + bookCAD), in CAD
   retentionBonusCAD: number;               // estimated at Q1's retention
   projectedCommissionCAD: number;
-  gapToNextTier: number;                   // commissionable $ needed this quarter
+  gapToNextTier: number;                   // additional Q2 commissionable needed to reach next tier
   paceFactor: number;
 }
 
 export function computeQ2Outlook(accounts: Account[], amId: string): Q2Outlook {
   const eligible = q2EligiblePartners(accounts);
+  const janComm = monthlyCommissionable(eligible, "Jan 26");
+  const febComm = monthlyCommissionable(eligible, "Feb 26");
   const marComm = monthlyCommissionable(eligible, "Mar 26");
   const aprComm = monthlyCommissionable(eligible, "Apr 26");
   const mayComm = monthlyCommissionable(eligible, "May 26");
   const paceFactor = mtdPaceFactor(amId);
-  // June anchored on May with the one-time Telkom credit reversed — projecting
-  // from the credit-depressed raw May would understate June (the HOS dashboard
-  // projects June above May for the same reason).
-  const junCommEst = monthlyCommissionableCreditFree(eligible, "May 26") * paceFactor;
 
-  const wamgrToDate = marComm + aprComm > 0 ? (mayComm - marComm) / (marComm + aprComm) : 0;
-  const projBase = marComm + aprComm + mayComm;
-  const wamgrProjected = projBase > 0 ? (junCommEst - marComm) / projBase : 0;
+  // Use finance-approved SHEET_COMM actuals for June when they cover ≥80% of
+  // the book. Otherwise fall back to the credit-free May × pace projection.
+  const junIsActual = isMonthActual(eligible, "Jun 26");
+  const junCommEst = junIsActual
+    ? monthlyCommissionable(eligible, "Jun 26")
+    : monthlyCommissionableCreditFree(eligible, "May 26") * paceFactor;
+
+  // True QoQ WAMGR: compare total Q2 commissionable to total Q1 commissionable.
+  // This matches the commission plan basis ("QoQ growth") and the finance sheet.
+  const q1Sum = janComm + febComm + marComm;
+  const q2Sum = aprComm + mayComm + junCommEst;
+  const wamgrProjected = q1Sum > 0 ? (q2Sum - q1Sum) / q1Sum : 0;
+
+  // Partial "to date" view: compare matched months (Apr+May vs Jan+Feb).
+  // When June is actual the full QoQ is known, so to-date equals projected.
+  const wamgrToDate = junIsActual
+    ? wamgrProjected
+    : janComm + febComm > 0 ? (aprComm + mayComm - janComm - febComm) / (janComm + febComm) : 0;
 
   const tier = getCommissionTier(wamgrProjected);
   const nextTier = getNextCommissionTier(wamgrProjected);
@@ -196,23 +227,32 @@ export function computeQ2Outlook(accounts: Account[], amId: string): Q2Outlook {
   // Payout split: CAD partners are already in CAD (no conversion); USD partners × 1.38.
   const aprSplit = monthlyCommissionableSplit(eligible, "Apr 26");
   const maySplit = monthlyCommissionableSplit(eligible, "May 26");
-  // Scale June estimate by each currency's share of May
-  const mayCreditFreeComm = monthlyCommissionableCreditFree(eligible, "May 26");
-  const junUSDEst = mayCreditFreeComm > 0 ? aprSplit.usd / aprComm * junCommEst : 0;
-  const junCADEst = junCommEst - junUSDEst;
-  const bookUSD = aprSplit.usd + maySplit.usd + junUSDEst;
-  const bookCAD = aprSplit.cad + maySplit.cad + junCADEst;
-  const bookUnderManagement = aprComm + mayComm + junCommEst;
+  // When June is actual use the real currency split; otherwise scale from May's mix.
+  let junUSD: number, junCAD: number;
+  if (junIsActual) {
+    const junSplit = monthlyCommissionableSplit(eligible, "Jun 26");
+    junUSD = junSplit.usd;
+    junCAD = junSplit.cad;
+  } else {
+    const mayCreditFreeComm = monthlyCommissionableCreditFree(eligible, "May 26");
+    junUSD = mayCreditFreeComm > 0 ? aprSplit.usd / aprComm * junCommEst : 0;
+    junCAD = junCommEst - junUSD;
+  }
+  const bookUSD = aprSplit.usd + maySplit.usd + junUSD;
+  const bookCAD = aprSplit.cad + maySplit.cad + junCAD;
+  const bookUnderManagement = q2Sum;
   const bookGrowthCommissionCAD = tier.rate * (bookUSD * USD_TO_CAD + bookCAD);
   const retentionBonusCAD = retentionBonus(Q1_RETENTION);
 
-  const projNetGrowth = junCommEst - marComm;
-  const gapToNextTier = nextTier ? Math.max(0, nextTier.wamgr * projBase - projNetGrowth) : 0;
+  // Gap: how much more Q2 total is needed to hit the next tier threshold.
+  const gapToNextTier = nextTier ? Math.max(0, (1 + nextTier.wamgr) * q1Sum - q2Sum) : 0;
 
   return {
-    marComm, aprComm, mayComm, junCommEst,
+    janComm, febComm, marComm, aprComm, mayComm, junCommEst, junIsActual,
+    q1Sum, q2Sum,
     wamgrToDate, wamgrProjected, tier, nextTier,
-    bookUnderManagement, bookGrowthCommissionCAD, retentionBonusCAD,
+    bookUnderManagement, bookUSD, bookCAD,
+    bookGrowthCommissionCAD, retentionBonusCAD,
     projectedCommissionCAD: bookGrowthCommissionCAD + retentionBonusCAD,
     gapToNextTier, paceFactor,
   };

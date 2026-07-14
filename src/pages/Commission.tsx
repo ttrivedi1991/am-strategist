@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useAM } from "@/context/AMContext";
 import { formatCurrency, formatMonthLabel } from "@/lib/utils";
 import {
-  COMMISSION_TIERS, blendedRate,
+  COMMISSION_TIERS, USD_TO_CAD, blendedRate,
   computeQ2Outlook, monthlyCommissionable, mtdCommissionable, q2EligiblePartners,
   accountMonthlyCommissionable,
 } from "@/lib/commission";
@@ -78,22 +78,24 @@ export default function Commission() {
   // June projected from a credit-free May base at the current in-month pace.
   const outlook = computeQ2Outlook(accounts, selectedAM.id);
   const {
-    marComm, aprComm, mayComm, junCommEst,
+    janComm, febComm, marComm, aprComm, mayComm, junCommEst, junIsActual,
+    q1Sum, q2Sum,
     wamgrToDate, wamgrProjected, tier: currentTier, nextTier,
-    bookUnderManagement, paceFactor, gapToNextTier,
+    bookUnderManagement, bookUSD, bookCAD,
+    bookGrowthCommissionCAD, paceFactor, gapToNextTier,
   } = outlook;
-  const eligible = q2EligiblePartners(accounts);
-  const janComm = monthlyCommissionable(eligible, "Jan 26");
-  const febComm = monthlyCommissionable(eligible, "Feb 26");
   const aprGrowth = aprComm - marComm;
   const mayGrowth = mayComm - aprComm;
   const partialNetGrowth = aprGrowth + mayGrowth;
+  // When June is actual use the true QoQ net growth (Q2 − Q1); before that
+  // we can only confirm the Apr+May vs Mar partial view.
+  const netQuarterlyGrowth = junIsActual ? q2Sum - q1Sum : partialNetGrowth;
   const wamgr = wamgrProjected; // tier + payout follow the projected quarter
 
-  const bookGrowthCommission = currentTier.rate * bookUnderManagement;
   const additionalCommNeededForNextTier = gapToNextTier;
+  // Next-tier uplift in CAD: rate delta × CAD-converted book
   const additionalCommissionAtNextTier = nextTier
-    ? (nextTier.rate - currentTier.rate) * bookUnderManagement
+    ? (nextTier.rate - currentTier.rate) * (bookUSD * USD_TO_CAD + bookCAD)
     : 0;
 
   // In-month standing (live, through last business day)
@@ -106,22 +108,22 @@ export default function Commission() {
   // Cancelled = billing goes to $0. Average monthly retention across Q2 (Apr, May, Jun est).
   // History indices: Mar=4, Apr=5, May=6
 
-  function countRetained(prevIdx: number, currIdx: number) {
+  function countRetained(prevWeek: string, currWeek: string) {
     return accounts.filter(a =>
-      (a.revenueHistory[prevIdx]?.mrr ?? 0) > 0 &&
-      (a.revenueHistory[currIdx]?.mrr ?? 0) > 0
+      (a.revenueHistory.find(h => h.week === prevWeek)?.mrr ?? 0) > 0 &&
+      (a.revenueHistory.find(h => h.week === currWeek)?.mrr ?? 0) > 0
     ).length;
   }
 
-  function countCohort(histIdx: number) {
-    return accounts.filter(a => (a.revenueHistory[histIdx]?.mrr ?? 0) > 0).length;
+  function countCohort(week: string) {
+    return accounts.filter(a => (a.revenueHistory.find(h => h.week === week)?.mrr ?? 0) > 0).length;
   }
 
-  const marCohort = countCohort(4);  // Q2 start — denominator for April retention
-  const aprCohort = countCohort(5);  // April — denominator for May retention
+  const marCohort = countCohort("Mar 26");
+  const aprCohort = countCohort("Apr 26");
 
-  const aprRetainedCount = countRetained(4, 5);
-  const mayRetainedCount = countRetained(5, 6);
+  const aprRetainedCount = countRetained("Mar 26", "Apr 26");
+  const mayRetainedCount = countRetained("Apr 26", "May 26");
 
   const aprRetention = marCohort > 0 ? aprRetainedCount / marCohort : 1;
   const mayRetention = aprCohort > 0 ? mayRetainedCount / aprCohort : 1;
@@ -133,14 +135,16 @@ export default function Commission() {
 
   // Partners who actually cancelled in Q2 — billing went to $0 during Apr or May
   const cancelledInQ2 = accounts.filter(a => {
-    const marMrr = a.revenueHistory[4]?.mrr ?? 0;
-    const aprMrr = a.revenueHistory[5]?.mrr ?? 0;
-    const mayMrr = a.revenueHistory[6]?.mrr ?? 0;
+    const marMrr = a.revenueHistory.find(h => h.week === "Mar 26")?.mrr ?? 0;
+    const aprMrr = a.revenueHistory.find(h => h.week === "Apr 26")?.mrr ?? 0;
+    const mayMrr = a.revenueHistory.find(h => h.week === "May 26")?.mrr ?? 0;
     return (marMrr > 0 && aprMrr === 0) || (aprMrr > 0 && mayMrr === 0);
   });
 
-  // ── Total projected commission ──────────────────────────────────────────────
-  const totalProjected = bookGrowthCommission + retentionTier.bonus;
+  // ── Total commission in CAD ──────────────────────────────────────────────────
+  // bookGrowthCommissionCAD already applies USD_TO_CAD to USD partners and
+  // leaves CAD partners unconverted. Retention bonus is a flat CAD amount.
+  const totalPayoutCAD = bookGrowthCommissionCAD + retentionTier.bonus;
 
   // ── Chart data ──────────────────────────────────────────────────────────────
   const chartData = [
@@ -149,7 +153,7 @@ export default function Commission() {
     { month: "Mar '26", week: "Mar 26", comm: marComm, isBaseline: true },
     { month: "Apr '26", week: "Apr 26", comm: aprComm, isBaseline: false },
     { month: "May '26", week: "May 26", comm: mayComm, isBaseline: false },
-    { month: "Jun '26 (proj)", week: "Jun 26", comm: junCommEst, isEstimate: true },
+    { month: junIsActual ? "Jun '26" : "Jun '26 (proj)", week: "Jun 26", comm: junCommEst, isEstimate: !junIsActual },
   ];
 
   // ── Strategy Engine ─────────────────────────────────────────────────────────
@@ -221,7 +225,10 @@ export default function Commission() {
     <div className="animate-fade-in">
       <Header
         title="Commission Analytics"
-        subtitle={`Q2 2026 · Projected: ${formatCurrency(totalProjected)} · WAMGR ${(wamgrToDate * 100).toFixed(2)}% to date, ${(wamgrProjected * 100).toFixed(2)}% projected (${currentTier.label} tier) · Commissionable book: ${formatCurrency(bookUnderManagement)}`}
+        subtitle={junIsActual
+          ? `Q2 2026 · Commission: ${formatCurrency(totalPayoutCAD)} CAD · WAMGR ${(wamgrProjected * 100).toFixed(2)}% QoQ (${currentTier.label} tier → ${(currentTier.rate * 100).toFixed(2)}% of book) · Q2: ${formatCurrency(q2Sum)} vs Q1: ${formatCurrency(q1Sum)}`
+          : `Q2 2026 · Projected: ${formatCurrency(totalPayoutCAD)} CAD · WAMGR ${(wamgrToDate * 100).toFixed(2)}% to date, ${(wamgrProjected * 100).toFixed(2)}% projected (${currentTier.label} tier) · Q2 book: ${formatCurrency(bookUnderManagement)}`
+        }
       />
 
       {/* Tab strip */}
@@ -281,8 +288,11 @@ export default function Commission() {
               {formatMonthLabel(LIVE_META.mtdLabel)} so far: {formatCurrency(mtdComm)} commissionable ({formatCurrency(mtdBillings)} billings) through {LIVE_META.dataThrough}
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Pacing {pacePct >= 0 ? "+" : ""}{pacePct.toFixed(1)}% vs the same {pace.spanDays} days of {formatMonthLabel(pace.priorMonthLabel)} (invoiced $, credits excluded) ·
-              June projected at this pace: <span className="font-medium text-foreground">{formatCurrency(junCommEst)}</span> commissionable
+              Pacing {pacePct >= 0 ? "+" : ""}{pacePct.toFixed(1)}%{pace ? ` vs the same ${pace.spanDays} days of ${formatMonthLabel(pace.priorMonthLabel)}` : ""} (invoiced $, credits excluded) ·
+              {junIsActual
+                ? <>June actual (finance-approved): <span className="font-medium text-foreground">{formatCurrency(junCommEst)}</span> commissionable</>
+                : <>June projected at this pace: <span className="font-medium text-foreground">{formatCurrency(junCommEst)}</span> commissionable</>
+              }
             </p>
           </div>
         </div>
@@ -293,10 +303,10 @@ export default function Commission() {
             <CardContent className="p-4">
               <div className="flex items-center gap-2 mb-1">
                 <DollarSign className="w-3.5 h-3.5 text-v-teal" />
-                <p className="text-xs font-medium text-muted-foreground">Projected Commission</p>
+                <p className="text-xs font-medium text-muted-foreground">{junIsActual ? "Q2 Commission" : "Projected Commission"}</p>
               </div>
-              <p className="text-2xl font-bold text-v-teal">{formatCurrency(totalProjected)}</p>
-              <p className="text-[10px] text-muted-foreground mt-1">Book growth + retention bonus · Q2</p>
+              <p className="text-2xl font-bold text-v-teal">{formatCurrency(totalPayoutCAD)}</p>
+              <p className="text-[10px] text-muted-foreground mt-1">Book growth + retention bonus · CAD</p>
             </CardContent>
           </Card>
 
@@ -309,7 +319,12 @@ export default function Commission() {
               <p className={`text-2xl font-bold ${wamgr >= 0.01 ? "text-v-green" : wamgr >= 0 ? "text-v-amber" : "text-v-red"}`}>
                 {(wamgrProjected * 100).toFixed(2)}%
               </p>
-              <p className="text-[10px] text-muted-foreground mt-1">To date: {(wamgrToDate * 100).toFixed(2)}% · {wamgrProjected < 0 ? "negative growth → 0% payout" : `at ${currentTier.label} → ${(currentTier.rate * 100).toFixed(2)}% of book`}</p>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                {junIsActual
+                  ? `Q2 ${formatCurrency(q2Sum)} vs Q1 ${formatCurrency(q1Sum)}`
+                  : `To date: ${(wamgrToDate * 100).toFixed(2)}% (Apr+May vs Jan+Feb)`
+                } · {wamgrProjected < 0 ? "negative growth → 0% payout" : `${currentTier.label} tier → ${(currentTier.rate * 100).toFixed(2)}% of book`}
+              </p>
             </CardContent>
           </Card>
 
@@ -332,10 +347,10 @@ export default function Commission() {
                 <Target className="w-3.5 h-3.5 text-muted-foreground" />
                 <p className="text-xs font-medium text-muted-foreground">Net Quarterly Growth</p>
               </div>
-              <p className={`text-2xl font-bold ${partialNetGrowth >= 0 ? "text-v-green" : "text-v-red"}`}>
-                {partialNetGrowth >= 0 ? "+" : ""}{formatCurrency(partialNetGrowth)}
+              <p className={`text-2xl font-bold ${netQuarterlyGrowth >= 0 ? "text-v-green" : "text-v-red"}`}>
+                {netQuarterlyGrowth >= 0 ? "+" : ""}{formatCurrency(netQuarterlyGrowth)}
               </p>
-              <p className="text-[10px] text-muted-foreground mt-1">Commissionable · Apr + May vs Mar</p>
+              <p className="text-[10px] text-muted-foreground mt-1">Commissionable · {junIsActual ? "Q2 total vs Q1 total" : "Apr + May vs Mar"}</p>
             </CardContent>
           </Card>
         </div>
@@ -349,7 +364,7 @@ export default function Commission() {
                 <div>
                   <CardTitle>Commissionable Billings — Q2 2026</CardTitle>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Existing partners only · Onboarding excluded · official billings, credits included · Jun projected from credit-free May at {(paceFactor * 100).toFixed(0)}% pace
+                    Existing partners only · Onboarding excluded · WAMGR = (Q2 total − Q1 total) / Q1 total · {junIsActual ? "Jun actual (finance-approved)" : `Jun projected from credit-free May at ${(paceFactor * 100).toFixed(0)}% pace`}
                   </p>
                 </div>
                 <Badge variant={wamgr >= 0.01 ? "success" : wamgr >= 0 ? "warning" : "danger"}>
@@ -403,7 +418,7 @@ export default function Commission() {
                     {[
                       { label: "Apr 2026", week: "Apr 26", comm: aprComm, growth: aprGrowth, prev: marComm },
                       { label: "May 2026", week: "May 26", comm: mayComm, growth: mayGrowth, prev: aprComm },
-                      { label: "Jun 2026 (proj. at pace)", week: "Jun 26", comm: junCommEst, growth: junCommEst - mayComm, prev: mayComm, isEst: true },
+                      { label: junIsActual ? "Jun 2026 (actual)" : "Jun 2026 (proj. at pace)", week: "Jun 26", comm: junCommEst, growth: junCommEst - mayComm, prev: mayComm, isEst: !junIsActual },
                     ].map(row => {
                       const isFocus = focusMonth === row.week;
                       return (
@@ -425,10 +440,13 @@ export default function Commission() {
                   </tbody>
                   <tfoot>
                     <tr className="bg-secondary/50 font-semibold border-t-2 border-border">
-                      <td className="px-3 py-2">Q2 WAMGR (Jun projected)</td>
-                      <td className="text-right px-3 py-2">{formatCurrency(bookUnderManagement)} <span className="text-[10px] font-normal text-muted-foreground">(book est.)</span></td>
-                      <td className={`text-right px-3 py-2 ${partialNetGrowth >= 0 ? "text-v-green" : "text-v-red"}`}>
-                        {partialNetGrowth >= 0 ? "+" : ""}{formatCurrency(partialNetGrowth)}
+                      <td className="px-3 py-2">Q2 WAMGR {junIsActual ? "(Jun actual)" : "(Jun projected)"}</td>
+                      <td className="text-right px-3 py-2">
+                        {formatCurrency(bookUnderManagement)}
+                        {junIsActual && <span className="text-[10px] font-normal text-muted-foreground ml-1">vs Q1 {formatCurrency(q1Sum)}</span>}
+                      </td>
+                      <td className={`text-right px-3 py-2 ${netQuarterlyGrowth >= 0 ? "text-v-green" : "text-v-red"}`}>
+                        {netQuarterlyGrowth >= 0 ? "+" : ""}{formatCurrency(netQuarterlyGrowth)}
                       </td>
                       <td className={`text-right px-3 py-2 ${wamgrProjected >= 0 ? "text-v-green" : "text-v-red"}`}>
                         WAMGR {(wamgrProjected * 100).toFixed(2)}%
@@ -446,7 +464,7 @@ export default function Commission() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-sm">Commission Breakdown</CardTitle>
-                <p className="text-xs text-muted-foreground">Q2 2026 projected payout</p>
+                <p className="text-xs text-muted-foreground">Q2 2026 payout · all amounts in CAD</p>
               </CardHeader>
               <CardContent className="space-y-4">
                 {/* WAMGR tier ladder */}
@@ -474,27 +492,44 @@ export default function Commission() {
                   })}
                 </div>
 
-                {/* Payout math */}
-                <div className="border-t border-border pt-3 space-y-2">
+                {/* Payout math — all output values in CAD */}
+                <div className="border-t border-border pt-3 space-y-1.5">
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Book (Apr – Jun commissionable)</p>
                   <div className="flex justify-between text-xs">
-                    <span className="text-muted-foreground">Book under management</span>
-                    <span className="font-medium">{formatCurrency(bookUnderManagement)}</span>
+                    <span className="text-muted-foreground">USD partners</span>
+                    <span className="font-medium">{formatCurrency(bookUSD)} USD</span>
                   </div>
                   <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">CAD partners (Cantrex, Home.CA)</span>
+                    <span className="font-medium">{formatCurrency(bookCAD)} CAD</span>
+                  </div>
+                  <div className="flex justify-between text-xs border-t border-border pt-1.5 mt-1">
                     <span className="text-muted-foreground">Commission rate</span>
                     <span className="font-medium">{(currentTier.rate * 100).toFixed(2)}%</span>
                   </div>
-                  <div className="flex justify-between text-xs font-semibold border-t border-border pt-2">
-                    <span>Book Growth (75%)</span>
-                    <span className="text-v-teal">{formatCurrency(bookGrowthCommission)}</span>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">USD → CAD rate</span>
+                    <span className="font-medium">× {USD_TO_CAD.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-xs font-semibold border-t border-border pt-1.5 mt-1">
+                    <span className="text-muted-foreground">USD: {formatCurrency(bookUSD)} × {(currentTier.rate * 100).toFixed(2)}% × {USD_TO_CAD.toFixed(2)}</span>
+                    <span className="text-v-teal">{formatCurrency(bookUSD * currentTier.rate * USD_TO_CAD)} CAD</span>
                   </div>
                   <div className="flex justify-between text-xs font-semibold">
-                    <span>Logo Retention (25%)</span>
-                    <span className="text-v-blue">{formatCurrency(retentionTier.bonus)}</span>
+                    <span className="text-muted-foreground">CAD: {formatCurrency(bookCAD)} × {(currentTier.rate * 100).toFixed(2)}%</span>
+                    <span className="text-v-teal">{formatCurrency(bookCAD * currentTier.rate)} CAD</span>
                   </div>
-                  <div className="flex justify-between text-sm font-bold border-t border-border pt-2">
-                    <span>Total Projected Q2</span>
-                    <span className="text-v-teal">{formatCurrency(totalProjected)}</span>
+                  <div className="flex justify-between text-xs font-semibold border-t border-border pt-1.5">
+                    <span>Book Growth Commission</span>
+                    <span className="text-v-teal">{formatCurrency(bookGrowthCommissionCAD)} CAD</span>
+                  </div>
+                  <div className="flex justify-between text-xs font-semibold">
+                    <span>Logo Retention Bonus</span>
+                    <span className="text-v-blue">{formatCurrency(retentionTier.bonus)} CAD</span>
+                  </div>
+                  <div className="flex justify-between text-sm font-bold border-t-2 border-border pt-2 mt-1">
+                    <span>{junIsActual ? "Total Q2 Commission" : "Total Projected Q2"}</span>
+                    <span className="text-v-teal">{formatCurrency(totalPayoutCAD)} CAD</span>
                   </div>
                 </div>
 

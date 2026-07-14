@@ -24,8 +24,8 @@ export const SHEET_COMM: Record<string, Record<string, number>> = {
   "AG-SLC55MDZ":    { "Jan 26": 64194.21, "Feb 26": 63620.11, "Mar 26": 64638.76, "Apr 26": 63580.11, "May 26": 64331.77, "Jun 26": 71624.43 },
   // Telkom SA Soc Ltd.  (Apr inflated by $20K overcharge; May depressed by $40K credit — telescope cancels in Q2 WAMGR)
   "AG-SHZ2GS2S":    { "Jan 26": 58459.80, "Feb 26": 58338.60, "Mar 26": 58741.50, "Apr 26": 77604.80, "May 26": 39634.38, "Jun 26": 58475.80 },
-  // United Wholesale Mortgage, LLC
-  "AG-4JFDHHX7W4":  { "Jan 26": 39330.00, "Feb 26": 39351.85, "Mar 26": 39330.00, "Apr 26": 39330.00, "May 26": 39330.00, "Jun 26": 39418.27 },
+  // United Wholesale Mortgage, LLC  (Jun gross $41,492.92 − CM37485 −$92.92 = $41,400 net × 95%)
+  "AG-4JFDHHX7W4":  { "Jan 26": 39330.00, "Feb 26": 39351.85, "Mar 26": 39330.00, "Apr 26": 39330.00, "May 26": 39330.00, "Jun 26": 39330.00 },
   // ApartmentRatings
   "AG-R97ZFF44":    { "Jan 26": 14028.19, "Feb 26": 14606.57, "Mar 26": 14457.37, "Apr 26": 13313.78, "May 26": 15236.77, "Jun 26": 15707.89 },
   // SM Marketing International  (no Jan — assigned Feb 2026; Q1 recognized manually by finance)
@@ -50,14 +50,14 @@ export const SHEET_COMM: Record<string, Record<string, number>> = {
   "AG-BFDSF9DJ":    { "Jan 26":  3911.75, "Feb 26":  5047.00, "Mar 26":  5042.25, "Apr 26":  5042.25, "May 26":  5028.00, "Jun 26":  5047.35 },
   // Fiska Inc.
   "AG-BNW3QSPBVV":  { "Jan 26":  3195.12, "Feb 26":  2824.73, "Mar 26":  1029.23, "Apr 26":  1126.70, "May 26":  1147.22, "Jun 26":  1152.35 },
-  // Platr.ai
-  "AG-NWCCJ46JGG":  { "Jan 26":  2737.60, "Feb 26":  2659.09, "Mar 26":  2619.47, "Apr 26":  2495.65, "May 26":  2492.15, "Jun 26":  2781.12 },
+  // Platr.ai  (Jun gross $3,139.40 − CM29276+CM29274 −$7.50 = $3,131.90 net; blended rate 88.59%)
+  "AG-NWCCJ46JGG":  { "Jan 26":  2737.60, "Feb 26":  2659.09, "Mar 26":  2619.47, "Apr 26":  2495.65, "May 26":  2492.15, "Jun 26":  2774.48 },
   // Cantrex Nationwide (CAD — no USD_TO_CAD applied at payout)
   "AG-GCRSZFJPNC":  { "Jan 26":  2005.75, "Feb 26":  2007.17, "Mar 26":  2037.70, "Apr 26":  2084.38, "May 26":  2036.61, "Jun 26":  2950.31 },
   // ChartLocal
   "AG-QT3RXNJG":    { "Jan 26":  1513.45, "Feb 26":  1463.45, "Mar 26":  1423.45, "Apr 26":  1382.53, "May 26":  1382.53, "Jun 26":  2532.22 },
-  // Data Axle
-  "AG-KDB93NJ8":    { "Jan 26":  1131.35, "Feb 26":   996.30, "Mar 26":   927.60, "Apr 26":   887.25, "May 26":   938.25, "Jun 26":   933.10 },
+  // Data Axle  (Jun gross $1,133 − CM36287 −$25.00 = $1,108 net; blended rate 82.35%)
+  "AG-KDB93NJ8":    { "Jan 26":  1131.35, "Feb 26":   996.30, "Mar 26":   927.60, "Apr 26":   887.25, "May 26":   938.25, "Jun 26":   912.51 },
   // Cylex  (large May drop reflects downgrade, not churn)
   "AG-MXQRFLNQRK":  { "Jan 26":  1069.23, "Feb 26":  1036.45, "Mar 26":  1026.17, "Apr 26":  1020.30, "May 26":    21.85, "Jun 26":    94.05 },
   // Digital Air Strike

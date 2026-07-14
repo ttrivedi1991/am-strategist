@@ -229,7 +229,7 @@ export default function StrategizeWithMe() {
     const trimmed = text.trim();
     if (!trimmed || streaming) return;
     if (!apiKey) {
-      setError("Add VITE_ANTHROPIC_API_KEY to .env.local to enable AI responses.");
+      setError("Gemini API key not configured. Run: GEMINI_API_KEY=your_key npx tsx scripts/seed-firestore.ts");
       return;
     }
 

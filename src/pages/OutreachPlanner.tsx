@@ -6,11 +6,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn, formatCurrency, getQoQBaseMRR, commissionableMRR, daysSince } from "@/lib/utils";
 import { useAM } from "@/context/AMContext";
-import type { Account } from "@/data/types";
+import type { Account, OrgAlert } from "@/data/types";
 import {
   Send, Mail, Calendar, Copy, CheckCircle2,
   ChevronDown, ChevronRight, Clock, Phone, DollarSign,
-  TrendingUp, TrendingDown, ExternalLink,
+  TrendingUp, TrendingDown, ExternalLink, Zap,
 } from "lucide-react";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -236,7 +236,19 @@ function buildCallPrep(account: Account, _ctx: AccountCommissionContext, situati
 
 // ─── Sequence builder ──────────────────────────────────────────────────────────
 
-function buildSequence(account: Account, ctx: AccountCommissionContext): OutreachStep[] {
+function intelFirstEmail(first: string, _account: Account, topAlert: OrgAlert, cta: string): string {
+  const typeVerb: Record<OrgAlert["type"], string> = {
+    acquisition: `I saw the news about ${topAlert.title}`,
+    leadership: `I noticed the leadership change — ${topAlert.title}`,
+    expansion: `Saw that ${topAlert.title}`,
+    "gtm-change": `I noticed ${topAlert.title}`,
+    funding: `Congrats on ${topAlert.title}`,
+    award: `Saw the recognition — ${topAlert.title}`,
+  };
+  return `Hi ${first},\n\n${typeVerb[topAlert.type]}. ${topAlert.summary}\n\n${cta}\n\nTanmay`;
+}
+
+function buildSequence(account: Account, ctx: AccountCommissionContext, topAlert: OrgAlert | null = null): OutreachStep[] {
   const first = account.contactName.split(" ")[0] || account.contactName;
   const vc = getVertCtx(account.vertical);
   const situation = getSituation(account, ctx);
@@ -250,8 +262,10 @@ function buildSequence(account: Account, ctx: AccountCommissionContext): Outreac
         day: 1,
         channel: "email",
         action: "Re-engagement",
-        subject: `${account.name} — checking in`,
-        body: account.gtmContext
+        subject: topAlert ? `${account.name} — saw the news` : `${account.name} — checking in`,
+        body: topAlert
+          ? intelFirstEmail(first, account, topAlert, `That's actually what prompted me to reach out — I want to make sure we're supporting ${account.name} through this. There are a few things from the Vendasta AI roadmap this quarter that are directly relevant. Are you free for 20 minutes next week?`)
+          : account.gtmContext
           ? `Hi ${first},\n\n${account.gtmContext}\n\nI want to walk through what this means for ${account.name}'s roadmap specifically — there are two or three things from the Vendasta AI suite this quarter that fit directly into what you're already doing. Are you free for 20 minutes next week?\n\nTanmay`
           : `Hi ${first},\n\nIt's been a while since we've connected — I want to fix that.\n\nThe Vendasta AI roadmap has moved fast this year, and there are a few things I'd like to walk through with you that are specific to what ${account.name}'s ${vc.smbs} are dealing with. I'd rather do it in 20 minutes than send a long note.\n\nAre you free next week?\n\nTanmay`,
       },
@@ -294,8 +308,10 @@ function buildSequence(account: Account, ctx: AccountCommissionContext): Outreac
         day: 1,
         channel: "email",
         action: "Strategic Review Request",
-        subject: `${account.name} — want to compare notes on Q2`,
-        body: account.gtmContext
+        subject: topAlert ? `${account.name} — want to compare notes` : `${account.name} — want to compare notes on Q2`,
+        body: topAlert
+          ? intelFirstEmail(first, account, topAlert, `I want to make sure we're building the right plan for ${account.name} with that context in mind. A 20-minute call would cover it — are you free this week or next?`)
+          : account.gtmContext
           ? `Hi ${first},\n\n${account.gtmContext}\n\nI've been reviewing ${account.name}'s deployment with that context in mind and want to make sure we're building the right plan for Q2 together. A 20-minute call would cover it.\n\nAre you free this week or next?\n\nTanmay`
           : `Hi ${first},\n\nI've been looking at ${account.name}'s direction heading into Q2 — given what your ${vc.smbs} are dealing with on ${vc.theme}, I want to make sure we're aligned on the right path forward.\n\nA quick call — 20 minutes — would cover it. Are you free this week or next?\n\nTanmay`,
       },
@@ -337,8 +353,10 @@ function buildSequence(account: Account, ctx: AccountCommissionContext): Outreac
         day: 1,
         channel: "email",
         action: "QBR Invite",
-        subject: `${account.name} — Q2 review and what's next`,
-        body: account.gtmContext
+        subject: topAlert ? `${account.name} — Q2 review + what's next` : `${account.name} — Q2 review and what's next`,
+        body: topAlert
+          ? intelFirstEmail(first, account, topAlert, `With that as backdrop, I want to make sure we're building on ${account.name}'s Q2 trajectory — not just maintaining it. Worth a dedicated 30 minutes? I'll come with specifics on where the Q3 opportunity is.`)
+          : account.gtmContext
           ? `Hi ${first},\n\n${account.gtmContext}\n\nWith that as context, I want to make sure we're building on ${account.name}'s Q2 trajectory — not just maintaining it. Worth a dedicated 30 minutes for a quarterly review? I'll come with specifics on where the Q3 opportunity is.\n\nTanmay`
           : `Hi ${first},\n\n${account.name} is performing well — I want to make sure we're building on that rather than just maintaining it.\n\nWorth a dedicated 30 minutes for a proper quarterly review? I'll come prepared with specifics on where the Q3 opportunity is for your ${vc.smbs}.\n\nTanmay`,
       },
@@ -381,8 +399,10 @@ function buildSequence(account: Account, ctx: AccountCommissionContext): Outreac
       day: 1,
       channel: "email",
       action: "Strategic Outreach",
-      subject: `${account.name} — a few Q2 ideas worth 20 minutes`,
-      body: account.gtmContext
+      subject: topAlert ? `${account.name} — saw the news, want to connect` : `${account.name} — a few Q2 ideas worth 20 minutes`,
+      body: topAlert
+        ? intelFirstEmail(first, account, topAlert, `That's part of what I wanted to connect on — I want to walk through a few specific ideas for ${account.name} this quarter. Are you free for 20 minutes this week or next?`)
+        : account.gtmContext
         ? `Hi ${first},\n\n${account.gtmContext}\n\nI want to walk through specifically how the Vendasta AI additions this quarter fit into what ${account.name} is already doing — the fit is direct and I'd rather show you than describe it.\n\nAre you free for 20 minutes this week or next?\n\nTanmay`
         : `Hi ${first},\n\nI've been reviewing what ${account.name}'s ${vc.smbs} are dealing with on ${vc.theme} and want to share a few specific ideas.\n\n${vc.aiAngle}. I'd rather walk through what this means for ${account.name} specifically than send a long note.\n\nAre you free for 20 minutes this week or next?\n\nTanmay`,
     },
@@ -424,15 +444,34 @@ function buildSequence(account: Account, ctx: AccountCommissionContext): Outreac
 
 // ─── Component ─────────────────────────────────────────────────────────────────
 
+function formatRelativeDate(date: string): string {
+  const days = daysSince(date);
+  if (days === 0) return "Today";
+  if (days === 1) return "Yesterday";
+  if (days < 7) return `${days}d ago`;
+  if (days < 30) return `${Math.floor(days / 7)}w ago`;
+  return new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
 export default function OutreachPlanner() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { accounts } = useAM();
+  const { accounts, orgAlerts } = useAM();
   const accountId = searchParams.get("account");
+  const intelId = searchParams.get("intel");
   const account = accounts.find(a => a.id === accountId) || accounts[0];
+
+  const accountAlerts = orgAlerts
+    .filter(a => a.accountId === account.id)
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  const topAlert: OrgAlert | null =
+    (intelId ? accountAlerts.find(a => a.id === intelId) ?? null : null) ||
+    accountAlerts.find(a => (a.urgency === "high" || a.urgency === "medium") && daysSince(a.date) <= 45) ||
+    null;
 
   const ctx = getCommissionContext(account);
   const situation = getSituation(account, ctx);
-  const sequence = buildSequence(account, ctx);
+  const sequence = buildSequence(account, ctx, topAlert);
   const situationMeta = SITUATION_META[situation];
 
   const [expandedStep, setExpandedStep] = useState<number | null>(0);
@@ -543,6 +582,56 @@ export default function OutreachPlanner() {
               )}
             </CardContent>
           </Card>
+
+          {/* Partner Intelligence */}
+          {accountAlerts.length > 0 && (
+            <Card className="border-v-amber/30 bg-v-amber/5">
+              <CardContent className="p-5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-v-amber" />
+                    <h3 className="text-sm font-semibold text-foreground">Partner Intelligence</h3>
+                  </div>
+                  {accountAlerts.length > 1 && (
+                    <Badge variant="outline" className="text-[10px]">{accountAlerts.length} signals</Badge>
+                  )}
+                </div>
+                {accountAlerts.slice(0, 2).map(alert => (
+                  <div
+                    key={alert.id}
+                    className={cn(
+                      "p-3 rounded-lg border space-y-1.5",
+                      alert.id === intelId || alert.id === topAlert?.id
+                        ? "bg-v-amber/10 border-v-amber/40"
+                        : "bg-secondary/50 border-border"
+                    )}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Badge
+                        variant={alert.urgency === "high" ? "danger" : alert.urgency === "medium" ? "warning" : "outline"}
+                        className="text-[10px] capitalize"
+                      >
+                        {alert.type.replace("-", " ")}
+                      </Badge>
+                      <span className="text-[10px] text-muted-foreground">{formatRelativeDate(alert.date)}</span>
+                    </div>
+                    <p className="text-xs font-semibold text-foreground leading-snug">{alert.title}</p>
+                    <p className="text-xs text-muted-foreground leading-relaxed">{alert.summary}</p>
+                    {alert.actionSuggestion && (
+                      <p className="text-[10px] text-v-amber italic border-l-2 border-v-amber/40 pl-2 leading-relaxed">
+                        {alert.actionSuggestion}
+                      </p>
+                    )}
+                  </div>
+                ))}
+                {topAlert && (
+                  <p className="text-[10px] text-muted-foreground">
+                    ↑ Top signal woven into Day 1 email automatically
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Commission lens */}
           <Card className="border-v-teal/20 bg-v-teal/5">

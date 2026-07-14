@@ -87,7 +87,7 @@ export default function Dashboard() {
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Source: f_billing_partner_snpm · {latestMonthLabel} actuals vs {QOQ_BASELINE_LABEL} close (prior-quarter baseline per commission plan) · excluding one-time billing credits: {adjRevenueChange >= 0 ? "+" : ""}{adjRevenueChange.toFixed(1)}% QoQ
-                {mtdTotal > 0 && <> · <span className="font-medium text-foreground">{formatMonthLabel(LIVE_META.mtdLabel)} month-to-date: {formatCurrency(mtdTotal)}</span> through {LIVE_META.dataThrough} · pacing {pacePct >= 0 ? "+" : ""}{pacePct.toFixed(1)}% vs same span of {formatMonthLabel(pace.priorMonthLabel)}</>}
+                {mtdTotal > 0 && <> · <span className="font-medium text-foreground">{formatMonthLabel(LIVE_META.mtdLabel)} month-to-date: {formatCurrency(mtdTotal)}</span> through {LIVE_META.dataThrough} {pace ? `· pacing ${pacePct >= 0 ? "+" : ""}${pacePct.toFixed(1)}% vs same span of ${formatMonthLabel(pace.priorMonthLabel)}` : ""}</>}
               </p>
             </div>
           </div>
@@ -100,11 +100,48 @@ export default function Dashboard() {
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Source: f_billing_partner_snpm · {latestMonthLabel} actuals vs {QOQ_BASELINE_LABEL} close (prior-quarter baseline per commission plan) · excluding one-time billing credits: {adjRevenueChange >= 0 ? "+" : ""}{adjRevenueChange.toFixed(1)}% QoQ
-                {mtdTotal > 0 && <> · <span className="font-medium text-foreground">{formatMonthLabel(LIVE_META.mtdLabel)} month-to-date: {formatCurrency(mtdTotal)}</span> through {LIVE_META.dataThrough} · pacing {pacePct >= 0 ? "+" : ""}{pacePct.toFixed(1)}% vs same span of {formatMonthLabel(pace.priorMonthLabel)}</>}
+                {mtdTotal > 0 && <> · <span className="font-medium text-foreground">{formatMonthLabel(LIVE_META.mtdLabel)} month-to-date: {formatCurrency(mtdTotal)}</span> through {LIVE_META.dataThrough} {pace ? `· pacing ${pacePct >= 0 ? "+" : ""}${pacePct.toFixed(1)}% vs same span of ${formatMonthLabel(pace.priorMonthLabel)}` : ""}</>}
               </p>
             </div>
           </div>
         )}
+
+        {/* Priority Actions — first thing visible after the health banner */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-1.5">
+                <Flame className="w-3.5 h-3.5 text-v-amber" />
+                This Week's Priority Actions
+              </CardTitle>
+              <Badge variant="warning">{selectedAM.weeklyActions.filter(a => a.priority === "high").length} urgent</Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {selectedAM.weeklyActions.map(action => (
+              <div key={action.id} className="flex items-start gap-3 p-3 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors group">
+                <div className="mt-0.5">
+                  {action.priority === "high"
+                    ? <AlertTriangle className="w-3.5 h-3.5 text-v-red" />
+                    : action.priority === "medium"
+                    ? <Clock className="w-3.5 h-3.5 text-v-amber" />
+                    : <CheckCircle2 className="w-3.5 h-3.5 text-v-teal" />
+                  }
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-xs font-semibold text-foreground">{action.account}</span>
+                    <Badge variant={priorityColor[action.priority as keyof typeof priorityColor]} className="text-[10px]">
+                      {priorityLabel[action.priority as keyof typeof priorityLabel]}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{action.action}</p>
+                </div>
+                <span className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0">{action.due}</span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
 
         {/* Month focus filter — scopes only the monthly cards (billings & commissionable) */}
         <div className="flex items-center justify-end gap-2 -mb-3">
@@ -251,74 +288,35 @@ export default function Dashboard() {
           </Card>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          {/* Weekly Priority Actions */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-1.5">
-                  <Flame className="w-3.5 h-3.5 text-v-amber" />
-                  This Week's Priority Actions
-                </CardTitle>
-                <Badge variant="warning">{selectedAM.weeklyActions.filter(a => a.priority === "high").length} urgent</Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {selectedAM.weeklyActions.map(action => (
-                <div key={action.id} className="flex items-start gap-3 p-3 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors group">
-                  <div className="mt-0.5">
-                    {action.priority === "high"
-                      ? <AlertTriangle className="w-3.5 h-3.5 text-v-red" />
-                      : action.priority === "medium"
-                      ? <Clock className="w-3.5 h-3.5 text-v-amber" />
-                      : <CheckCircle2 className="w-3.5 h-3.5 text-v-teal" />
-                    }
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-xs font-semibold text-foreground">{action.account}</span>
-                      <Badge variant={priorityColor[action.priority as keyof typeof priorityColor]} className="text-[10px]">
-                        {priorityLabel[action.priority as keyof typeof priorityLabel]}
-                      </Badge>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{action.action}</p>
-                  </div>
-                  <span className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0">{action.due}</span>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-
-          {/* Top Org Alerts */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-1.5">
-                  <AlertTriangle className="w-3.5 h-3.5 text-v-red" />
-                  Partner Intelligence Alerts
-                </CardTitle>
-                <Button variant="ghost" size="sm" className="text-xs" onClick={() => navigate("/intel")}>
-                  View all <ArrowRight className="w-3 h-3" />
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {orgAlerts.slice(0, 4).map(alert => (
-                <div key={alert.id} className="flex items-start gap-3 p-3 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors cursor-pointer" onClick={() => navigate("/intel")}>
-                  <div className={`mt-0.5 w-2 h-2 rounded-full shrink-0 ${alert.urgency === "high" ? "bg-v-red" : alert.urgency === "medium" ? "bg-v-amber" : "bg-v-teal"}`} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold text-foreground">{alert.accountName}</p>
-                    <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{alert.title}</p>
-                  </div>
-                  <span className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0">{alert.date.slice(5)}</span>
-                </div>
-              ))}
-              <Button variant="outline" size="sm" className="w-full mt-1" onClick={() => navigate("/intel")}>
-                View all {orgAlerts.length} alerts <ArrowRight className="w-3.5 h-3.5" />
+        {/* Top Org Alerts */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5 text-v-red" />
+                Partner Intelligence Alerts
+              </CardTitle>
+              <Button variant="ghost" size="sm" className="text-xs" onClick={() => navigate("/intel")}>
+                View all <ArrowRight className="w-3 h-3" />
               </Button>
-            </CardContent>
-          </Card>
-        </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {orgAlerts.slice(0, 4).map(alert => (
+              <div key={alert.id} className="flex items-start gap-3 p-3 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors cursor-pointer" onClick={() => navigate("/intel")}>
+                <div className={`mt-0.5 w-2 h-2 rounded-full shrink-0 ${alert.urgency === "high" ? "bg-v-red" : alert.urgency === "medium" ? "bg-v-amber" : "bg-v-teal"}`} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-foreground">{alert.accountName}</p>
+                  <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{alert.title}</p>
+                </div>
+                <span className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0">{alert.date.slice(5)}</span>
+              </div>
+            ))}
+            <Button variant="outline" size="sm" className="w-full mt-1" onClick={() => navigate("/intel")}>
+              View all {orgAlerts.length} alerts <ArrowRight className="w-3.5 h-3.5" />
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

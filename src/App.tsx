@@ -6,6 +6,7 @@ import Accounts from "@/pages/Accounts";
 import AIAdoption from "@/pages/AIAdoption";
 import OrgIntelligence from "@/pages/OrgIntelligence";
 import StrategizeWithMe from "@/pages/StrategizeWithMe";
+import OutreachPlanner from "@/pages/OutreachPlanner";
 import MIARecovery from "@/pages/MIARecovery";
 import WeeklyBrief from "@/pages/WeeklyBrief";
 import Commission from "@/pages/Commission";
@@ -53,6 +54,7 @@ export default function App() {
           <Route path="ai-adoption" element={<AIAdoption />} />
           <Route path="intel" element={<OrgIntelligence />} />
           <Route path="strategize" element={<StrategizeWithMe />} />
+          <Route path="outreach" element={<OutreachPlanner />} />
           <Route path="mia" element={<MIARecovery />} />
           <Route path="brief" element={<WeeklyBrief />} />
           <Route path="commission" element={<AMOnlyRoute><Commission /></AMOnlyRoute>} />
