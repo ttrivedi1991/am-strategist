@@ -198,8 +198,9 @@ export default function Commission() {
         ))}
       </div>
 
-      {/* Month filter strip — shared across both tabs */}
-      <div className="px-6 py-3 flex items-center gap-4 flex-wrap border-b border-border bg-secondary/20">
+      {/* Month filter strip — drives the By SKU drill-down (the Overview is a
+          quarter view, so the filter only renders on the SKU tab) */}
+      {tab === "sku" && <div className="px-6 py-3 flex items-center gap-4 flex-wrap border-b border-border bg-secondary/20">
         <span className="text-xs font-medium text-muted-foreground shrink-0">Focus month:</span>
         {(["Q1 '26", "Q2 '26", "Q3 '26"] as const).map(q => {
           const monthOpts = FILTER_MONTHS.filter(m => m.q === q);
@@ -227,7 +228,7 @@ export default function Commission() {
         <span className="text-[10px] text-muted-foreground ml-auto hidden sm:block">
           {focusMonth}{focusMonth === mtdLabel ? " (month to date)" : ""} · commissionable {formatCurrency(focusComm)}
         </span>
-      </div>
+      </div>}
 
       {tab === "overview" && <div className="p-6 space-y-6">
         {/* ── In-month standing (live) ── */}
