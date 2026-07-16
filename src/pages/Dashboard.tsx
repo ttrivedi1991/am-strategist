@@ -120,7 +120,14 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent className="space-y-2">
             {selectedAM.weeklyActions.map(action => (
-              <div key={action.id} className="flex items-start gap-3 p-3 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors group">
+              <div
+                key={action.id}
+                onClick={() => {
+                  const acct = accounts.find(a => a.name === action.account);
+                  navigate(acct ? `/outreach?account=${acct.id}` : "/outreach");
+                }}
+                className="flex items-start gap-3 p-3 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors group cursor-pointer"
+              >
                 <div className="mt-0.5">
                   {action.priority === "high"
                     ? <AlertTriangle className="w-3.5 h-3.5 text-v-red" />
