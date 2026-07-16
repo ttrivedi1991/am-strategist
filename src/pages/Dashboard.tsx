@@ -5,9 +5,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatCurrency, formatMonthLabel, pctChange, getQoQBaseMRR, getLatestMRR, QOQ_BASELINE_LABEL } from "@/lib/utils";
 import { computeQuarterOutlook, mtdCommissionable, monthlyCommissionable, billingAdjustment, QUARTER } from "@/lib/commission";
-import { recommendedActions, bookBridge, driverPhrase, exact$, QTR } from "@/lib/insights";
+import { recommendedActions } from "@/lib/insights";
+import {
+  buildBookFacts, composeFallback, generateExecSummary,
+  summaryCacheKey, loadCachedSummary, cacheSummary, type ExecSummary,
+} from "@/lib/execSummary";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAM } from "@/context/AMContext";
 import {
@@ -71,20 +75,28 @@ export default function Dashboard() {
       ? Math.min(100, Math.round(((wamgr - currentTier.wamgr) / (nextTier.wamgr - currentTier.wamgr)) * 100))
       : 100;
 
-  // Storytelling layer: the same facts told for three audiences (Bryan's
-  // "what story does this tell Des / Bryan / Brendan"). The bridge decomposes
-  // the quarter move into per-partner deltas with attributed reasons.
+  // Executive summary — ONE consistent narrative for every reader. Gemini
+  // writes prose from an exact fact sheet (cached per data refresh);
+  // deterministic fallback when no key is available.
   const recActions = recommendedActions(accounts, orgAlerts, 5);
-  const bridge = bookBridge(accounts, orgAlerts);
-  const [lens, setLens] = useState<"am" | "hos" | "exec">("exec");
+  const [summary, setSummary] = useState<ExecSummary | null>(null);
+  const [summarySource, setSummarySource] = useState<"ai" | "fallback" | null>(null);
 
-  const qDir = bridge.delta >= 0 ? "up" : "down";
-  const qMove = `${exact$(Math.abs(bridge.delta))}/mo`;
-  const paceLine = mtdTotal > 0 && pace
-    ? `${formatMonthLabel(LIVE_META.mtdLabel)} is pacing ${pacePct >= 0 ? "+" : ""}${pacePct.toFixed(1)}% vs the same span of ${formatMonthLabel(pace.priorMonthLabel)}.`
-    : "";
-  const topRisk = recActions.find(a => a.urgency === "high");
-  const topOpp = recActions.find(a => a.theme.includes("Expansion") || a.theme === "AI Adoption Gap");
+  useEffect(() => {
+    const facts = buildBookFacts(accounts, orgAlerts, pace, LIVE_META.mtdLabel, mtdTotal);
+    const key = summaryCacheKey(selectedAM.id, LIVE_META.dataThrough);
+    const cached = loadCachedSummary(key);
+    if (cached) { setSummary(cached); setSummarySource("ai"); return; }
+    setSummary(composeFallback(facts));
+    setSummarySource("fallback");
+    if (am.geminiApiKey) {
+      const ctrl = new AbortController();
+      generateExecSummary(facts, am.geminiApiKey, ctrl.signal)
+        .then(s => { cacheSummary(key, s); setSummary(s); setSummarySource("ai"); })
+        .catch(() => { /* fallback already showing */ });
+      return () => ctrl.abort();
+    }
+  }, [accounts, orgAlerts, selectedAM.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="animate-fade-in">
@@ -123,73 +135,31 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* The story — same numbers, told for the reader */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <CardTitle>The Story — {QTR.label} in one read</CardTitle>
-              <div className="flex items-center gap-1 text-xs">
-                {([["exec", "Executive"], ["hos", "Head of Sales"], ["am", "My View"]] as const).map(([key, label]) => (
-                  <button
-                    key={key}
-                    onClick={() => setLens(key)}
-                    className={`px-2.5 py-1 rounded-lg font-medium transition-colors ${lens === key ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"}`}
-                  >
-                    {label}
-                  </button>
-                ))}
+        {/* Executive Summary — one consistent narrative for every reader */}
+        {summary && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Executive Summary</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-base font-semibold text-foreground leading-snug">{summary.headline}</p>
+              <p className="text-sm text-foreground leading-relaxed">{summary.performance}</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="p-3 rounded-lg bg-v-red/5 border border-v-red/15">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-v-red mb-1">Risks</p>
+                  <p className="text-xs text-foreground leading-relaxed">{summary.risks}</p>
+                </div>
+                <div className="p-3 rounded-lg bg-v-teal/5 border border-v-teal/15">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-v-teal mb-1">Outlook</p>
+                  <p className="text-xs text-foreground leading-relaxed">{summary.outlook}</p>
+                </div>
               </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {lens === "exec" && (
-              <p className="text-sm text-foreground leading-relaxed">
-                The ISV book closed {QTR.label} at {exact$(bridge.to)}/mo, {qDir} {qMove} from the {formatMonthLabel(QTR.from)} close.
-                {bridge.decliners.length > 0 && <> The decline side is concentrated: {bridge.decliners.slice(0, 2).map(driverPhrase).join("; ")}.</>}
-                {bridge.gainers.length > 0 && <> Offsetting growth: {bridge.gainers.slice(0, 2).map(driverPhrase).join("; ")}.</>}
-                {" "}{paceLine}
-                {topRisk && <> Biggest risk in play: {topRisk.account.name} ({topRisk.theme.toLowerCase()}).</>}
-                {topOpp && <> Clearest upside: {topOpp.account.name} ({topOpp.theme.toLowerCase()}).</>}
+              <p className="text-[10px] text-muted-foreground border-t border-border pt-2">
+                Numbers from BigQuery closes through {LIVE_META.dataThrough}{summarySource === "fallback" ? "" : " · narrative by Gemini from an exact fact sheet"} · unexplained movements are flagged, never guessed.
               </p>
-            )}
-            {lens === "hos" && (
-              <div className="space-y-2 text-sm text-foreground leading-relaxed">
-                <p>
-                  {accounts.filter(a => getLatestMRR(a.revenueHistory) > 0).length} active partners billing {exact$(bridge.to)}/mo.
-                  {" "}{QTR.label} moved {bridge.delta >= 0 ? "+" : "−"}{qMove}; the top movers explain ~{bridge.coveredPct}% of the gross change.
-                </p>
-                {bridge.decliners.length > 0 && (
-                  <p><span className="font-semibold">Declines being worked:</span> {bridge.decliners.slice(0, 3).map(driverPhrase).join("; ")}.</p>
-                )}
-                {bridge.gainers.length > 0 && (
-                  <p><span className="font-semibold">Growth to protect:</span> {bridge.gainers.slice(0, 3).map(driverPhrase).join("; ")}.</p>
-                )}
-                <p>
-                  <span className="font-semibold">In motion:</span> {recActions.map(a => `${a.theme} (${a.account.name})`).join(" · ")}.
-                  {" "}Every decline above has an owner and a next touch in the Outreach Planner.
-                </p>
-              </div>
-            )}
-            {lens === "am" && (
-              <div className="space-y-2 text-sm text-foreground leading-relaxed">
-                <p>
-                  {QTR.label} net movement {bridge.delta >= 0 ? "+" : "−"}{qMove} ({exact$(bridge.from)} → {exact$(bridge.to)}).
-                  {" "}Commission lens: net quarterly growth {formatCurrency(netQuarterlyGrowth)} → WAMGR {(wamgr * 100).toFixed(2)}% ({currentTier.label} tier).
-                  {" "}{paceLine}
-                </p>
-                <p>
-                  <span className="font-semibold">Why:</span> {[...bridge.decliners.slice(0, 3), ...bridge.gainers.slice(0, 2)].map(driverPhrase).join("; ") || "no material per-partner movement"}.
-                </p>
-                <p>
-                  <span className="font-semibold">This week:</span> {recActions.slice(0, 3).map(a => `${a.theme} — ${a.account.name}`).join(" · ")}.
-                </p>
-              </div>
-            )}
-            <p className="text-[10px] text-muted-foreground border-t border-border pt-2">
-              Same numbers in every lens — BigQuery {formatMonthLabel(QTR.from)}→{formatMonthLabel(QTR.to)} closes{mtdTotal > 0 ? ` + ${formatMonthLabel(LIVE_META.mtdLabel)} MTD` : ""}. "Unattributed" means no verified signal or credit explains the move yet — the ask goes in the next partner call.
-            </p>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Recommended Actions — headed by the business shift, then the partner */}
         <Card>
