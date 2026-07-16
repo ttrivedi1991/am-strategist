@@ -23,7 +23,8 @@ service cloud.firestore {
     function isViewer() {
       return isVerified() && request.auth.token.email in [
         'blang@vendasta.com',     // Brady Lang (Technical CSM)
-        'lmcrae@vendasta.com'     // L. McRae (read-only)
+        'lmcrae@vendasta.com',    // L. McRae (read-only)
+        'blarson@vendasta.com'    // Bryan Larson (VP, Strategy)
       ];
     }
 
