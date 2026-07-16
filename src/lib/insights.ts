@@ -150,6 +150,62 @@ export function recommendedActions(
   return [...byAccount.values()].sort((a, b) => b.score - a.score).slice(0, limit);
 }
 
+// ─── Book bridge: WHY the number moved ─────────────────────────────────────────
+// The book-level quarter delta decomposes exactly into per-partner deltas.
+// Each driver carries an attributed reason where one exists (verified org
+// signal, one-time billing credit) — and is honest when none does.
+
+import { billingAdjustment } from "@/lib/commission";
+
+export interface BridgeDriver {
+  account: Account;
+  delta: number;
+  reason: string | null; // short attributed cause, or null = unattributed
+}
+
+const QTR_WEEKS = ["Apr 26", "May 26", "Jun 26"];
+
+function reasonFor(account: Account, orgAlerts: OrgAlert[]): string | null {
+  // One-time billing credit inside the quarter is the hardest attribution.
+  const credit = QTR_WEEKS.reduce((s, w) => s + billingAdjustment(account.name, w), 0);
+  if (Math.abs(credit) > 250) {
+    return `one-time billing credit of ${exact$(Math.abs(credit))} in the quarter`;
+  }
+  // Verified public signal (fresh enough to plausibly relate).
+  const signal = orgAlerts
+    .filter(a => a.accountId === account.id && daysSince(a.date) <= 120)
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+  if (signal) return signal.title;
+  return null;
+}
+
+export function bookBridge(accounts: Account[], orgAlerts: OrgAlert[]) {
+  const drivers: BridgeDriver[] = accounts
+    .map(a => ({ a, q: quarterDelta(a) }))
+    .filter((x): x is { a: Account; q: NonNullable<ReturnType<typeof quarterDelta>> } => x.q !== null && Math.abs(x.q.delta) >= 250)
+    .map(({ a, q }) => ({ account: a, delta: q.delta, reason: reasonFor(a, orgAlerts) }));
+
+  const from = accounts.reduce((s, a) => s + (a.revenueHistory.find(h => h.week === QTR.from)?.mrr ?? 0), 0);
+  const to = accounts.reduce((s, a) => s + (a.revenueHistory.find(h => h.week === QTR.to)?.mrr ?? 0), 0);
+  const delta = to - from;
+
+  const decliners = drivers.filter(d => d.delta < 0).sort((a, b) => a.delta - b.delta);
+  const gainers = drivers.filter(d => d.delta > 0).sort((a, b) => b.delta - a.delta);
+
+  // How much of the net move the top movers explain
+  const gross = drivers.reduce((s, d) => s + Math.abs(d.delta), 0);
+  const topGross = [...decliners.slice(0, 3), ...gainers.slice(0, 3)].reduce((s, d) => s + Math.abs(d.delta), 0);
+  const coveredPct = gross > 0 ? Math.round((topGross / gross) * 100) : 0;
+
+  return { from, to, delta, gainers, decliners, coveredPct };
+}
+
+export function driverPhrase(d: BridgeDriver): string {
+  const sign = d.delta < 0 ? "−" : "+";
+  const base = `${d.account.name} ${sign}${exact$(Math.abs(d.delta))}/mo`;
+  return d.reason ? `${base} (${d.reason})` : `${base} (unattributed — ask directly)`;
+}
+
 // ─── Book-level story ──────────────────────────────────────────────────────────
 
 export function bookStory(accounts: Account[], orgAlerts: OrgAlert[]): string {
