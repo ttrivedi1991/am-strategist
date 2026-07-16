@@ -27,9 +27,12 @@ const urgencyConfig = {
   low: { variant: "info" as const, label: "FYI" },
 };
 
+// Date of the last research pass that produced the current ORG_ALERTS set.
+const SIGNALS_REFRESHED = "2026-07-16";
+
 export default function OrgIntelligence() {
   const navigate = useNavigate();
-  const { orgAlerts, selectedAM } = useAM();
+  const { orgAlerts, selectedAM, accounts } = useAM();
   const [filter, setFilter] = useState<"all" | OrgAlert["urgency"]>("all");
   const [expanded, setExpanded] = useState<string | null>(null);
 
@@ -40,7 +43,7 @@ export default function OrgIntelligence() {
     <div className="animate-fade-in">
       <Header
         title="Org Intelligence"
-        subtitle="Real-time signals from your partners — acquisitions, leadership changes, expansions"
+        subtitle="Verified public signals from your partners — acquisitions, leadership changes, expansions"
       />
 
       <div className="p-6 space-y-5">
@@ -69,7 +72,7 @@ export default function OrgIntelligence() {
         <div className="flex items-center justify-between px-4 py-2.5 rounded-lg bg-v-blue/5 border border-v-blue/20">
           <div className="flex items-center gap-2 text-xs text-v-blue">
             <Bell className="w-3.5 h-3.5" />
-            <span>Manually curated signals · no automated feed connected yet</span>
+            <span>Web-verified signals, every item source-linked · last research pass {formatDate(SIGNALS_REFRESHED)} · refresh by asking Claude to re-run partner research</span>
           </div>
         </div>
 
@@ -100,10 +103,22 @@ export default function OrgIntelligence() {
                       </div>
 
                       <p className="text-sm font-medium text-foreground mt-1">{alert.title}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
-                        <ExternalLink className="w-2.5 h-2.5" />
-                        {alert.source}
-                      </p>
+                      {alert.sourceUrl ? (
+                        <a
+                          href={alert.sourceUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1 hover:text-v-blue hover:underline w-fit"
+                        >
+                          <ExternalLink className="w-2.5 h-2.5" />
+                          {alert.source}
+                        </a>
+                      ) : (
+                        <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                          <ExternalLink className="w-2.5 h-2.5" />
+                          {alert.source}
+                        </p>
+                      )}
 
                       {isExpanded && (
                         <div className="mt-3 space-y-3 animate-fade-in">
@@ -119,7 +134,14 @@ export default function OrgIntelligence() {
                             <Button size="sm" onClick={() => navigate(`/outreach?account=${alert.accountId}&intel=${alert.id}`)}>
                               Create Outreach Plan <ArrowRight className="w-3.5 h-3.5" />
                             </Button>
-                            <Button size="sm" variant="outline">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                const contact = accounts.find(a => a.id === alert.accountId)?.contactEmail ?? "";
+                                window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(contact)}&su=${encodeURIComponent(`${alert.accountName} — ${alert.title}`)}`);
+                              }}
+                            >
                               Draft Email
                             </Button>
                           </div>
@@ -167,16 +189,16 @@ export default function OrgIntelligence() {
             </CardTitle>
           </CardHeader>
           <CardContent>
+            {/* Honest coverage stats — derived from the data, not hardcoded "Active" badges. */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {[
-                { label: "Accounts Monitored", value: "10/10", ok: true },
-                { label: "LinkedIn Signals", value: "Active", ok: true },
-                { label: "Google News Alerts", value: "Active", ok: true },
-                { label: "Website Changes", value: "Active", ok: true },
+                { label: "Partners with signals", value: `${new Set(orgAlerts.map(a => a.accountId)).size} of ${accounts.length}` },
+                { label: "Verified signals", value: String(orgAlerts.length) },
+                { label: "Last research pass", value: formatDate(SIGNALS_REFRESHED) },
+                { label: "Feed type", value: "Web research (on request)" },
               ].map(item => (
                 <div key={item.label} className="p-3 rounded-lg bg-secondary/50">
                   <div className="flex items-center gap-1.5 mb-1">
-                    <div className={`w-1.5 h-1.5 rounded-full ${item.ok ? "bg-v-green" : "bg-v-red"}`} />
                     <span className="text-xs text-muted-foreground">{item.label}</span>
                   </div>
                   <p className="text-sm font-semibold text-foreground">{item.value}</p>

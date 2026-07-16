@@ -1,16 +1,28 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Header } from "@/components/layout/Header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAM } from "@/context/AMContext";
-import { formatCurrency, commissionableMRR, daysSince } from "@/lib/utils";
+import { db } from "@/lib/firebase";
+import { doc, getDoc } from "firebase/firestore";
+import { formatCurrency, commissionableMRR, formatDate } from "@/lib/utils";
 import {
   Sparkles, ArrowRight, Target, ChevronDown, ChevronUp,
-  ClipboardPaste, Loader2, Lightbulb, AlertCircle,
+  ClipboardPaste, Loader2, Lightbulb, AlertCircle, ExternalLink,
 } from "lucide-react";
 import type { Account } from "@/data/types";
+
+// Stored brief fetched from Confluence (meta/weeklyBrief, seeded by
+// scripts/seed-firestore.ts from scripts/data/weekly-brief.json).
+interface StoredBrief {
+  title: string;
+  sourceUrl: string;
+  author?: string;
+  fetchedAt: string;
+  content: string;
+}
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -42,10 +54,10 @@ function buildAccountSummaries(accounts: Account[]) {
   return accounts.map(a => {
     const latest = a.revenueHistory?.at(-1)?.mrr ?? 0;
     const prior = a.revenueHistory?.at(-2)?.mrr ?? 0;
-    const days = daysSince(a.lastMeeting);
+    // No "mia" here — lastMeeting is a static seed date, and deriving MIA from
+    // it told Gemini every account was silent (see Top Blockers fix).
     const situation =
-      days >= 45 ? "mia"
-      : a.health === "at-risk" || a.health === "churning" ? "at-risk"
+      a.health === "at-risk" || a.health === "churning" ? "at-risk"
       : latest - prior < -1000 ? "declining"
       : a.health === "champion" ? "champion"
       : "stable";
@@ -111,30 +123,6 @@ Rules:
   return JSON.parse(jsonText) as BriefAnalysis;
 }
 
-// ─── Sample brief ─────────────────────────────────────────────────────────────
-
-const SAMPLE_BRIEF = `## Vendasta Product Roadmap Update — Week of April 27, 2026
-
-### AI & Automation
-- AI Receptionist v3.0 launching May 15: multi-language support (French, Spanish), improved intent detection, CRM sync
-- AI Review Responder now supports bulk scheduling and brand tone customization
-- New AI Content Writer templates for Home Services and Healthcare verticals
-
-### Platform Updates
-- Vendasta CRM: new pipeline view with AI-predicted close probability
-- Business App: updated dashboard with AI insights widget
-- Reputation Management: competitor benchmarking now live
-
-### GTM Priorities this Quarter
-- Focus vertical: Home Services and Legal (highest AI adoption velocity)
-- Partner incentive: Double commission on AI Receptionist upgrades through May 31
-- New case study available: FastLane Auto Group — 40% increase in lead capture with AI
-
-### Marketing Campaigns Running
-- "AI for Small Business" email nurture sequence (April–May)
-- Google/LinkedIn ads targeting Home Services SMBs
-- Partner webinar: "How to Win with AI" — May 8, 2pm ET`;
-
 // ─── Urgency config ───────────────────────────────────────────────────────────
 
 const urgencyConfig = {
@@ -148,12 +136,29 @@ const urgencyConfig = {
 export default function WeeklyBrief() {
   const navigate = useNavigate();
   const { accounts, geminiApiKey } = useAM();
-  const [brief, setBrief] = useState(SAMPLE_BRIEF);
+  const [brief, setBrief] = useState("");
+  const [storedBrief, setStoredBrief] = useState<StoredBrief | null>(null);
+  const [briefLoading, setBriefLoading] = useState(true);
   const [analysis, setAnalysis] = useState<BriefAnalysis | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showBrief, setShowBrief] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const userEdited = useRef(false);
+
+  // Load the current brief from Firestore. A manual paste always wins.
+  useEffect(() => {
+    getDoc(doc(db, "meta", "weeklyBrief"))
+      .then(snap => {
+        if (snap.exists()) {
+          const data = snap.data() as StoredBrief;
+          setStoredBrief(data);
+          if (!userEdited.current) setBrief(data.content);
+        }
+      })
+      .catch(() => { /* not fatal — paste still works */ })
+      .finally(() => setBriefLoading(false));
+  }, []);
 
   async function analyze() {
     if (!geminiApiKey) return;
@@ -190,7 +195,7 @@ export default function WeeklyBrief() {
     <div className="animate-fade-in">
       <Header
         title="Weekly Brief"
-        subtitle="Paste your R&D & Marketing brief — Gemini maps it to your book of business"
+        subtitle="The latest Product Brief from Confluence, mapped to your book of business by Gemini"
       />
 
       <div className="p-6 space-y-5">
@@ -202,11 +207,21 @@ export default function WeeklyBrief() {
               <div>
                 <CardTitle className="flex items-center gap-1.5">
                   <ClipboardPaste className="w-3.5 h-3.5 text-v-blue" />
-                  Paste Weekly R&D / Marketing Brief
+                  {storedBrief ? storedBrief.title : "Weekly R&D / Marketing Brief"}
                 </CardTitle>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Copy from Confluence and paste here. Gemini reads the updates and generates partner-specific action items using each account's GTM context.
-                </p>
+                {storedBrief ? (
+                  <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1.5 flex-wrap">
+                    <span>{storedBrief.author ? `${storedBrief.author} · ` : ""}pulled from Confluence {formatDate(storedBrief.fetchedAt)}</span>
+                    <a href={storedBrief.sourceUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-v-blue hover:underline">
+                      <ExternalLink className="w-2.5 h-2.5" /> open source page
+                    </a>
+                    <span>· paste below to override</span>
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {briefLoading ? "Loading the stored brief…" : "No stored brief found — copy the latest Product Brief from Confluence and paste here."}
+                  </p>
+                )}
               </div>
               <button
                 onClick={() => setShowBrief(!showBrief)}
@@ -222,7 +237,7 @@ export default function WeeklyBrief() {
             <CardContent className="pt-0 space-y-3">
               <textarea
                 value={brief}
-                onChange={e => setBrief(e.target.value)}
+                onChange={e => { userEdited.current = true; setBrief(e.target.value); }}
                 rows={14}
                 placeholder="Paste your weekly brief here..."
                 className="w-full px-3 py-2.5 text-xs font-mono rounded-lg border border-border bg-secondary/30 focus:outline-none focus:ring-2 focus:ring-ring resize-none leading-relaxed"
@@ -245,8 +260,8 @@ export default function WeeklyBrief() {
                   Gemini key not configured — run <code className="bg-secondary px-1 rounded">GEMINI_API_KEY=... npx tsx scripts/seed-firestore.ts</code>
                 </span>
               )}
-              {geminiApiKey && !showBrief && brief.trim() && (
-                <span className="text-xs text-muted-foreground">Sample brief loaded — click Generate or paste your own</span>
+              {geminiApiKey && !showBrief && brief.trim() && storedBrief && (
+                <span className="text-xs text-muted-foreground">"{storedBrief.title}" loaded — click Generate, or Show brief to review/override</span>
               )}
             </div>
           </CardContent>

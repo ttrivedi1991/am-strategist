@@ -39,6 +39,16 @@ export function getLatestMRR(history: { week: string; mrr: number }[]): number {
   return history[history.length - 1]?.mrr ?? 0;
 }
 
+// Movement across the last two closed months (~60 days): latest close vs two
+// months prior. revenueHistory's last entry is the last CLOSED month (current
+// MTD lives in account.mtdBilling), so this never compares a partial month.
+export function recentDeltaMRR(history: { week: string; mrr: number }[]) {
+  if (history.length < 3) return null;
+  const to = history[history.length - 1];
+  const from = history[history.length - 3];
+  return { delta: to.mrr - from.mrr, from: from.mrr, to: to.mrr, fromLabel: from.week, toLabel: to.week };
+}
+
 // Commissionable dollars/mo = billings × inclusion rate, summed across active products.
 export function commissionableMRR(breakdown: { mrr: number; commissionable: number }[]): number {
   return breakdown.reduce((s, p) => s + (p.mrr > 0 ? p.commissionable : 0), 0);

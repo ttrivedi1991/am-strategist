@@ -4,7 +4,7 @@ import { Header } from "@/components/layout/Header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { cn, formatCurrency, getQoQBaseMRR, commissionableMRR, daysSince } from "@/lib/utils";
+import { cn, formatCurrency, getQoQBaseMRR, commissionableMRR, daysSince, recentDeltaMRR, formatMonthLabel } from "@/lib/utils";
 import { useAM } from "@/context/AMContext";
 import type { Account, OrgAlert } from "@/data/types";
 import {
@@ -42,7 +42,50 @@ interface AccountCommissionContext {
   commissionable: number;
   effRate: number;
   topProduct?: { name: string; commissionable: number };
+  // 60-day movement (last closed month vs two months prior) — drives the
+  // "revenue drops / major fluctuations" thread of the outreach strategy.
+  recent: ReturnType<typeof recentDeltaMRR>;
 }
+
+// Exact dollars for email copy — formatCurrency's "$8.8K" reads like a
+// dashboard, not like a person who looked at the account.
+function exactCurrency(v: number): string {
+  return `$${Math.round(v).toLocaleString("en-US")}`;
+}
+
+// What the partner actually runs with us, from the live product breakdown
+// (not just AI SKUs) — the "what do they use Vendasta for" thread.
+function usageSummary(account: Account): string | null {
+  const lines = account.productBreakdown
+    .filter(p => p.mrr > 0)
+    .sort((a, b) => b.mrr - a.mrr);
+  if (lines.length === 0) return null;
+  const top = lines.slice(0, 2).map(p => p.name.trim());
+  return lines.length > 2
+    ? `${top.join(" and ")}, plus ${lines.length - 2} other lines`
+    : top.join(top.length > 1 ? " and " : "");
+}
+
+// One factual sentence about the last 60 days of billings, or null when the
+// movement is too small to be worth naming. `direction` lets sequences pick
+// emails that only make sense one way.
+function movementSentence(ctx: AccountCommissionContext): { text: string; direction: "up" | "down" } | null {
+  const r = ctx.recent;
+  if (!r || r.from === 0) return null;
+  const pct = Math.abs(r.delta / r.from);
+  if (Math.abs(r.delta) < 500 || pct < 0.05) return null;
+  const from = `${exactCurrency(r.from)} in ${formatMonthLabel(r.fromLabel)}`;
+  const to = `${exactCurrency(r.to)} in ${formatMonthLabel(r.toLabel)}`;
+  return r.delta < 0
+    ? { text: `billings moved from ${from} to ${to}`, direction: "down" }
+    : { text: `billings grew from ${from} to ${to}`, direction: "up" };
+}
+
+// Roadmap thread: Brendan King's March 20 "Strategic Discussion: 2026 AI
+// Roadmap" email is the shared context every partner already has; the Q3
+// launches are from the current P2 launch plan.
+const ROADMAP_REF = "Brendan's March 20 note on the 2026 AI roadmap";
+const ROADMAP_Q3 = "AI Social Media Manager and AI Blogger both launch this quarter";
 
 // ─── Vertical context map ──────────────────────────────────────────────────────
 
@@ -156,16 +199,21 @@ function getCommissionContext(account: Account): AccountCommissionContext {
     commissionable,
     effRate: breakdownBillings > 0 ? commissionable / breakdownBillings : 0.95,
     topProduct,
+    recent: recentDeltaMRR(account.revenueHistory),
   };
 }
 
 // ─── Situation detection ───────────────────────────────────────────────────────
 
-function getSituation(account: Account, ctx: AccountCommissionContext): Situation {
-  const days = account.lastMeeting ? daysSince(account.lastMeeting) : 999;
-  if (days >= 45 || account.isMIA) return "mia";
-  if (account.health === "champion" && ctx.qoqDelta >= 0) return "champion";
-  if (ctx.qoqDelta < -1000) return "declining";
+// `override` comes from the URL (?situation=mia), set by Top Blockers when a
+// real Gmail-verified engagement gap exists. Never derived from
+// account.lastMeeting / isMIA here — those are static seed fields that made
+// every account look MIA and pushed everyone into the re-engagement sequence.
+function getSituation(account: Account, ctx: AccountCommissionContext, override?: string | null): Situation {
+  if (override === "mia") return "mia";
+  const recentDelta = ctx.recent?.delta ?? 0;
+  if (account.health === "champion" && recentDelta >= 0) return "champion";
+  if (recentDelta < -1000) return "declining";
   if (account.health === "at-risk" || account.health === "churning") return "atRisk";
   return "stable";
 }
@@ -199,7 +247,7 @@ function buildCallPrep(account: Account, _ctx: AccountCommissionContext, situati
       `"Is there anything on the Vendasta side that's been a friction point — even a small one?"`,
     ],
     declining: [
-      `"Walk me through the Q2 billing movement from your side — was that a deliberate change, or something we should investigate together?"`,
+      `"Walk me through the last 60 days of billing movement from your side — was that a deliberate change, or something we should investigate together?"`,
       `"Are your ${vc.smbs} actively using what they have, or is there an adoption gap we need to close first?"`,
       `"What does a successful relationship with Vendasta look like for ${account.name} by end of year — same scale, lower, or higher?"`,
     ],
@@ -248,13 +296,18 @@ function intelFirstEmail(first: string, _account: Account, topAlert: OrgAlert, c
   return `Hi ${first},\n\n${typeVerb[topAlert.type]}. ${topAlert.summary}\n\n${cta}\n\nTanmay`;
 }
 
-function buildSequence(account: Account, ctx: AccountCommissionContext, topAlert: OrgAlert | null = null): OutreachStep[] {
+function buildSequence(account: Account, ctx: AccountCommissionContext, topAlert: OrgAlert | null, situation: Situation): OutreachStep[] {
   const first = account.contactName.split(" ")[0] || account.contactName;
   const vc = getVertCtx(account.vertical);
-  const situation = getSituation(account, ctx);
   const callPrep = buildCallPrep(account, ctx, situation);
   const aiList = account.products.slice(0, 2).join(" and ");
   const hasAI = account.products.length > 0;
+  // The six threads of the outreach strategy, resolved per account:
+  // business (gtmContext) · what they run with us (usage) · AI offer (vc.aiAngle)
+  // · roadmap (ROADMAP_*) · 60-day movement (move) · org intel (topAlert).
+  const usage = usageSummary(account);
+  const move = movementSentence(ctx);
+  const biz = account.gtmContext ? `${account.gtmContext}\n\n` : "";
 
   if (situation === "mia") {
     return [
@@ -262,28 +315,26 @@ function buildSequence(account: Account, ctx: AccountCommissionContext, topAlert
         day: 1,
         channel: "email",
         action: "Re-engagement",
-        subject: topAlert ? `${account.name} — saw the news` : `${account.name} — checking in`,
+        subject: topAlert ? `${account.name} — saw the news` : `${account.name} — picking the thread back up`,
         body: topAlert
-          ? intelFirstEmail(first, account, topAlert, `That's actually what prompted me to reach out — I want to make sure we're supporting ${account.name} through this. There are a few things from the Vendasta AI roadmap this quarter that are directly relevant. Are you free for 20 minutes next week?`)
-          : account.gtmContext
-          ? `Hi ${first},\n\n${account.gtmContext}\n\nI want to walk through what this means for ${account.name}'s roadmap specifically — there are two or three things from the Vendasta AI suite this quarter that fit directly into what you're already doing. Are you free for 20 minutes next week?\n\nTanmay`
-          : `Hi ${first},\n\nIt's been a while since we've connected — I want to fix that.\n\nThe Vendasta AI roadmap has moved fast this year, and there are a few things I'd like to walk through with you that are specific to what ${account.name}'s ${vc.smbs} are dealing with. I'd rather do it in 20 minutes than send a long note.\n\nAre you free next week?\n\nTanmay`,
+          ? intelFirstEmail(first, account, topAlert, `That's what prompted me to reach out — I want to make sure we're supporting ${account.name} through this. You're running ${usage ?? "the Vendasta platform"} with us today, and there are pieces of this quarter's AI roadmap that bear directly on it. Are you free for 20 minutes next week?`)
+          : `Hi ${first},\n\n${biz}We haven't spoken properly in a while, and I'd rather fix that than keep planning around guesses. Today you're running ${usage ?? "the Vendasta platform"} with us${move ? `, and ${move.text} over the last 60 days` : ""}. Before I recommend anything, I want to hear where ${account.name} is headed for the rest of the year.\n\nAre you free for 20 minutes next week?\n\nTanmay`,
       },
       {
         day: 5,
         channel: "email",
-        action: "Specific Product Angle",
-        subject: `A specific idea for ${account.name}`,
-        body: account.gtmContext
-          ? `Hi ${first},\n\nFollowing up on my note from earlier this week. One specific thing I want to put on the table: ${vc.aiAngle}.\n\nThe reason I'm flagging this for ${account.name} specifically: ${vc.theme} is exactly the gap I keep hearing from ${vc.smbs} in your space. The fit isn't generic — I want to show you what it looks like for your deployment.\n\nI can keep it to 15 minutes. What works?\n\nTanmay`
-          : `Hi ${first},\n\nWhile I have your attention: ${vc.aiAngle}. A few ${account.vertical} partners have been running this in Q2 with clear results on ${vc.theme}.\n\nGiven ${account.name}'s ${vc.smbs}, the fit is direct. I can keep it to 15 minutes.\n\nTanmay`,
+        action: "Roadmap Substance",
+        subject: `What's landing on the roadmap this quarter`,
+        body: `Hi ${first},\n\nFollowing up with the substance, so the ask isn't abstract. ${ROADMAP_REF} set the direction; the near-term piece is that ${ROADMAP_Q3}. For ${vc.smbs}, the practical read: ${vc.aiAngle}.\n\n${hasAI
+          ? `You already run ${aiList}, so this builds on what's deployed — nothing new for your team to learn.`
+          : `${account.name} hasn't turned on any of the AI products yet, so we'd be starting clean — no migration, no rework.`}\n\nIf a call is easier than email, 15 minutes covers it.\n\nTanmay`,
       },
       {
         day: 11,
         channel: "email",
         action: "Direct Ask",
-        subject: `Re: ${account.name} — checking in`,
-        body: `Hi ${first},\n\nStill here. I know schedules are full — if next week doesn't work, send me a two-week window and I'll fit around your calendar.\n\nI keep following up because ${account.name} is an account I'm focused on this quarter, and I don't want to make decisions about what to prioritize for you without actually talking to you first.\n\nTanmay`,
+        subject: `Re: ${account.name} — picking the thread back up`,
+        body: `Hi ${first},\n\nI know the calendar is the real constraint. Send me any 20-minute window in the next two weeks and I'll work around it.\n\nThe reason I'm persisting: ${account.name} is one of the accounts I'm building my second-half plan around, and I don't want to make those calls without your read.\n\nTanmay`,
       },
       {
         day: 16,
@@ -296,8 +347,8 @@ function buildSequence(account: Account, ctx: AccountCommissionContext, topAlert
         day: 23,
         channel: "email",
         action: "Graceful Offramp",
-        subject: `Re: ${account.name} — checking in`,
-        body: `Hi ${first},\n\nI've sent a few notes over the past few weeks — I'll take the hint for now.\n\nIf the timing or priorities have shifted on your side, I'm easy to reach. I'll check back in Q3.\n\nTanmay`,
+        subject: `Re: ${account.name} — picking the thread back up`,
+        body: `Hi ${first},\n\nI've sent a few notes over the past few weeks — I'll take the hint for now.\n\nIf the timing or priorities have shifted on your side, I'm easy to reach. I'll check back later in the quarter.\n\nTanmay`,
       },
     ];
   }
@@ -308,21 +359,17 @@ function buildSequence(account: Account, ctx: AccountCommissionContext, topAlert
         day: 1,
         channel: "email",
         action: "Strategic Review Request",
-        subject: topAlert ? `${account.name} — want to compare notes` : `${account.name} — want to compare notes on Q2`,
+        subject: topAlert ? `${account.name} — want to compare notes` : `${account.name} — the last 60 days`,
         body: topAlert
-          ? intelFirstEmail(first, account, topAlert, `I want to make sure we're building the right plan for ${account.name} with that context in mind. A 20-minute call would cover it — are you free this week or next?`)
-          : account.gtmContext
-          ? `Hi ${first},\n\n${account.gtmContext}\n\nI've been reviewing ${account.name}'s deployment with that context in mind and want to make sure we're building the right plan for Q2 together. A 20-minute call would cover it.\n\nAre you free this week or next?\n\nTanmay`
-          : `Hi ${first},\n\nI've been looking at ${account.name}'s direction heading into Q2 — given what your ${vc.smbs} are dealing with on ${vc.theme}, I want to make sure we're aligned on the right path forward.\n\nA quick call — 20 minutes — would cover it. Are you free this week or next?\n\nTanmay`,
+          ? intelFirstEmail(first, account, topAlert, `I want to make sure we're building the right plan for ${account.name} with that context in mind${move?.direction === "down" ? ` — especially since ${move.text} on our side` : ""}. A 20-minute call would cover it. Are you free this week or next?`)
+          : `Hi ${first},\n\n${biz}I'm writing because of the numbers: ${move?.text ?? "billings have stepped down over the last 60 days"}. That may be deliberate on your side — a product decision, a budget cycle — or it may be something we should fix together. I'd rather ask than assume.\n\nYou're running ${usage ?? "the Vendasta platform"} with us, so there's real surface area to work with either way. Do you have 20 minutes this week?\n\nTanmay`,
       },
       {
         day: 4,
         channel: "email",
-        action: "Specific Product Fit",
-        subject: `A specific idea for ${account.name} in Q2`,
-        body: account.gtmContext
-          ? `Hi ${first},\n\nFollowing up on my note from earlier this week. One concrete thing I want to walk through: ${vc.aiAngle}.\n\nA few ${account.vertical} partners have run this in Q2 specifically because ${vc.theme} is one of the clearest levers they have right now. For ${account.name}, the fit is direct — I'd rather show you than describe it. Worth 20 minutes?\n\nTanmay`
-          : `Hi ${first},\n\nWhile I have your attention: ${vc.aiAngle}. A few ${account.vertical} partners have run with this in Q2 and seen clear improvement on ${vc.theme}.\n\nGiven where ${account.name} is right now, this is either a path forward or it clarifies what's driving the Q2 movement — either way it's worth 20 minutes.\n\nTanmay`,
+        action: "Adoption Levers",
+        subject: `Re: ${account.name} — the last 60 days`,
+        body: `Hi ${first},\n\nAdding substance to my last note. ${ROADMAP_REF} set the direction, and the near-term piece is that ${ROADMAP_Q3}. For ${vc.smbs}, the read is: ${vc.aiAngle}.\n\nIf the recent step-down reflects soft adoption rather than a deliberate change, these are the levers I'd look at first — they lift usage of what you already pay for rather than adding cost.\n\nTanmay`,
       },
       {
         day: 8,
@@ -334,15 +381,15 @@ function buildSequence(account: Account, ctx: AccountCommissionContext, topAlert
         day: 13,
         channel: "email",
         action: "Decision Point",
-        subject: `Re: ${account.name} — Q2 direction`,
-        body: `Hi ${first},\n\n${account.name}'s billing is ${formatCurrency(Math.abs(ctx.qoqDelta))} below the March close. I want to make sure we have a clear plan — whether that's recovering the volume, adjusting the product mix, or rightsizing the commitment.\n\nA 20-minute call this week closes the loop. What works for you?\n\nTanmay`,
-        note: "This is the first touch where you name the billing delta directly. By now you've earned the right to be direct.",
+        subject: `Re: ${account.name} — the last 60 days`,
+        body: `Hi ${first},\n\nWhere things stand: ${move?.text ?? "billings are down over the last 60 days"}. I want a clear plan against that — recovering the volume, adjusting the product mix, or rightsizing the commitment if that's the honest answer.\n\nA 20-minute call this week settles it. What works for you?\n\nTanmay`,
+        note: "This is the first touch where you name the billing numbers directly. By now you've earned the right to be direct.",
       },
       {
         day: 19,
         channel: "linkedin",
         action: "Secondary Channel",
-        body: `Hi ${first} — I've sent a few notes on ${account.name}'s Q2 direction and haven't heard back. Trying here in case email is buried. Happy to work around your schedule if now isn't the right time.`,
+        body: `Hi ${first} — I've sent a few notes on ${account.name}'s recent direction and haven't heard back. Trying here in case email is buried. Happy to work around your schedule if now isn't the right time.`,
       },
     ];
   }
@@ -353,35 +400,31 @@ function buildSequence(account: Account, ctx: AccountCommissionContext, topAlert
         day: 1,
         channel: "email",
         action: "QBR Invite",
-        subject: topAlert ? `${account.name} — Q2 review + what's next` : `${account.name} — Q2 review and what's next`,
+        subject: topAlert ? `${account.name} — building on the momentum` : `${account.name} — quarterly review and what's next`,
         body: topAlert
-          ? intelFirstEmail(first, account, topAlert, `With that as backdrop, I want to make sure we're building on ${account.name}'s Q2 trajectory — not just maintaining it. Worth a dedicated 30 minutes? I'll come with specifics on where the Q3 opportunity is.`)
-          : account.gtmContext
-          ? `Hi ${first},\n\n${account.gtmContext}\n\nWith that as context, I want to make sure we're building on ${account.name}'s Q2 trajectory — not just maintaining it. Worth a dedicated 30 minutes for a quarterly review? I'll come with specifics on where the Q3 opportunity is.\n\nTanmay`
-          : `Hi ${first},\n\n${account.name} is performing well — I want to make sure we're building on that rather than just maintaining it.\n\nWorth a dedicated 30 minutes for a proper quarterly review? I'll come prepared with specifics on where the Q3 opportunity is for your ${vc.smbs}.\n\nTanmay`,
+          ? intelFirstEmail(first, account, topAlert, `With that as backdrop: ${move?.direction === "up" ? `${move.text}, and` : ""} I want to make sure we're building on ${account.name}'s trajectory, not just maintaining it. Worth a dedicated 30 minutes? I'll come with specifics on where the second-half opportunity is.`)
+          : `Hi ${first},\n\n${biz}The numbers back up what you've built: ${move?.direction === "up" ? move.text : `you're running ${usage ?? "a substantial deployment"} with us and it's holding strong`}. That trajectory is exactly when I want dedicated time — not to maintain it, but to decide what to build on top of it.\n\nWorth 30 minutes for a proper quarterly review? I'll come with specifics, including how this quarter's launches (${ROADMAP_Q3.replace(" both launch this quarter", "")}) fit your ${vc.smbs}.\n\nTanmay`,
       },
       {
         day: 5,
         channel: "email",
         action: "Expansion Angle",
-        subject: `An expansion idea for ${account.name}`,
-        body: account.gtmContext
-          ? `Hi ${first},\n\nAhead of our call — one thing I want to put on the table: ${vc.aiAngle}.\n\nGiven ${account.name}'s scale and what your ${vc.smbs} are dealing with on ${vc.theme}, this is the expansion that makes sense now rather than later. I'll put together a short brief before we connect.\n\nTanmay`
-          : `Hi ${first},\n\nAhead of our call — one thing I want to put on the table: ${vc.aiAngle}. Given ${account.name}'s trajectory and the scale of your ${vc.smbs}, this is the kind of expansion that makes sense to look at now rather than later in the year.\n\nI'll put together a short brief before we connect.\n\nTanmay`,
+        subject: `Ahead of our call — the expansion I'd look at`,
+        body: `Hi ${first},\n\nAhead of our call, the one idea I most want your read on: ${vc.aiAngle}.\n\nYou're running ${usage ?? "a solid stack"} today — the expansion I have in mind builds directly on that footprint rather than opening a new front. I'll put together a short brief before we connect.\n\nTanmay`,
       },
       {
         day: 10,
         channel: "call",
         action: "QBR",
         callPrep,
-        note: "30-minute QBR. Come with a pre-built one-pager: current state, Q3 opportunity, and two specific expansion proposals.",
+        note: "30-minute QBR. Come with a pre-built one-pager: current state, second-half opportunity, and two specific expansion proposals.",
       },
       {
         day: 15,
         channel: "email",
         action: "Proposal Follow-up",
         subject: `Following up — ${account.name} next steps`,
-        body: `Hi ${first},\n\nGood conversation. I'll have the specifics we discussed — the expansion modeling and the Q3 timeline — in your inbox by end of week.\n\nTanmay`,
+        body: `Hi ${first},\n\nGood conversation. I'll have the specifics we discussed — the expansion modeling and the timeline — in your inbox by end of week.\n\nTanmay`,
         note: "Fill in the specifics from the QBR before sending.",
       },
       {
@@ -399,25 +442,19 @@ function buildSequence(account: Account, ctx: AccountCommissionContext, topAlert
       day: 1,
       channel: "email",
       action: "Strategic Outreach",
-      subject: topAlert ? `${account.name} — saw the news, want to connect` : `${account.name} — a few Q2 ideas worth 20 minutes`,
+      subject: topAlert ? `${account.name} — saw the news, want to connect` : `${account.name} — second-half planning`,
       body: topAlert
-        ? intelFirstEmail(first, account, topAlert, `That's part of what I wanted to connect on — I want to walk through a few specific ideas for ${account.name} this quarter. Are you free for 20 minutes this week or next?`)
-        : account.gtmContext
-        ? `Hi ${first},\n\n${account.gtmContext}\n\nI want to walk through specifically how the Vendasta AI additions this quarter fit into what ${account.name} is already doing — the fit is direct and I'd rather show you than describe it.\n\nAre you free for 20 minutes this week or next?\n\nTanmay`
-        : `Hi ${first},\n\nI've been reviewing what ${account.name}'s ${vc.smbs} are dealing with on ${vc.theme} and want to share a few specific ideas.\n\n${vc.aiAngle}. I'd rather walk through what this means for ${account.name} specifically than send a long note.\n\nAre you free for 20 minutes this week or next?\n\nTanmay`,
+        ? intelFirstEmail(first, account, topAlert, `That's part of what I wanted to connect on. You're running ${usage ?? "the Vendasta platform"} with us today, and I want to pressure-test whether that's still the right stack for where ${account.name} is going. Are you free for 20 minutes this week or next?`)
+        : `Hi ${first},\n\n${biz}You're running ${usage ?? "the Vendasta platform"} with us${move ? `, and ${move.text}` : ", and billings have held steady"}. Heading into the second half I want to pressure-test whether that's still the right stack for where ${account.name} is going — ${ROADMAP_REF} set the direction, and ${ROADMAP_Q3}.\n\nAre you free for 20 minutes this week or next?\n\nTanmay`,
     },
     {
       day: 5,
       channel: "email",
       action: "Product Fit Detail",
-      subject: `Re: ${account.name} — a few Q2 ideas worth 20 minutes`,
-      body: account.gtmContext
-        ? `Hi ${first},\n\nFollowing up on my note from earlier this week. The specific thing I want to walk through: ${vc.aiAngle}.\n\n${hasAI
-            ? `You're already running ${aiList} — the items I want to show you build directly on that.`
-            : `${account.name} doesn't have AI products active yet, which is actually a clean starting point — no migration, no rework, and the full value from day one.`}\n\nDo you have 20 minutes this week or next?\n\nTanmay`
-        : `Hi ${first},\n\nFollowing up on my note from earlier this week. The short version: ${vc.aiAngle}.\n\n${hasAI
-            ? `You're already running ${aiList} — the items I want to walk through build on that.`
-            : `${account.name} doesn't have AI products active yet, which makes this a clean starting point.`}\n\nDo you have 20 minutes?\n\nTanmay`,
+      subject: `Re: ${account.name} — second-half planning`,
+      body: `Hi ${first},\n\nThe specific thing I'd walk through: ${vc.aiAngle}.\n\n${hasAI
+          ? `You already run ${aiList} — this quarter's additions build on that footprint, and I can share adoption numbers from other ${account.vertical} partners so you can judge the fit yourself.`
+          : `${account.name} hasn't turned on the AI products yet. Starting clean is genuinely easier — no migration, and your ${vc.smbs} see the impact from day one.`}\n\nDo you have 20 minutes this week or next?\n\nTanmay`,
     },
     {
       day: 9,
@@ -430,14 +467,14 @@ function buildSequence(account: Account, ctx: AccountCommissionContext, topAlert
       channel: "email",
       action: "Follow-up",
       subject: `Following up — ${account.name}`,
-      body: `Hi ${first},\n\nFollowing up on my last note. The 20 minutes I'm asking for will be specific to ${account.name} — not a standard pitch. I want to walk through what actually makes sense for your deployment.\n\nIf this week doesn't work, what does?\n\nTanmay`,
+      body: `Hi ${first},\n\nFollowing up on my last note. The agenda is specific to ${account.name}: your current stack, the movement in your billings, and two roadmap items that affect how your ${vc.smbs} get found. Not a standard pitch.\n\nIf this week doesn't work, what does?\n\nTanmay`,
     },
     {
       day: 22,
       channel: "email",
       action: "Close the Loop",
       subject: `Re: ${account.name} + 2026 AI roadmap`,
-      body: `Hi ${first},\n\nLast note on this for now. If Q2 is a bad time, say the word and I'll come back in Q3.\n\nIf there's a quicker question I can answer by email in the meantime, I'm happy to do that too.\n\nTanmay`,
+      body: `Hi ${first},\n\nLast note on this for now. If the timing is wrong this quarter, say so and I'll come back with the same agenda when it isn't.\n\nIf there's a quicker question I can answer by email in the meantime, I'm happy to do that too.\n\nTanmay`,
     },
   ];
 }
@@ -458,6 +495,7 @@ export default function OutreachPlanner() {
   const { accounts, orgAlerts } = useAM();
   const accountId = searchParams.get("account");
   const intelId = searchParams.get("intel");
+  const situationParam = searchParams.get("situation");
   const account = accounts.find(a => a.id === accountId) || accounts[0];
 
   const accountAlerts = orgAlerts
@@ -470,8 +508,8 @@ export default function OutreachPlanner() {
     null;
 
   const ctx = getCommissionContext(account);
-  const situation = getSituation(account, ctx);
-  const sequence = buildSequence(account, ctx, topAlert);
+  const situation = getSituation(account, ctx, situationParam);
+  const sequence = buildSequence(account, ctx, topAlert, situation);
   const situationMeta = SITUATION_META[situation];
 
   const [expandedStep, setExpandedStep] = useState<number | null>(0);
@@ -551,10 +589,12 @@ export default function OutreachPlanner() {
                   <p className="text-sm font-bold text-v-teal">{formatCurrency(ctx.commissionable)}</p>
                 </div>
                 <div className="p-2 rounded-lg bg-secondary/50 border border-border">
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">QoQ (vs Mar)</p>
-                  <p className={cn("text-sm font-bold flex items-center gap-1", ctx.qoqDelta < 0 ? "text-v-red" : "text-v-green")}>
-                    {ctx.qoqDelta < 0 ? <TrendingDown className="w-3 h-3" /> : <TrendingUp className="w-3 h-3" />}
-                    {ctx.qoqDelta < 0 ? "−" : "+"}{formatCurrency(Math.abs(ctx.qoqDelta))}
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">
+                    60-Day Δ{ctx.recent ? ` (${ctx.recent.fromLabel}→${ctx.recent.toLabel})` : ""}
+                  </p>
+                  <p className={cn("text-sm font-bold flex items-center gap-1", (ctx.recent?.delta ?? 0) < 0 ? "text-v-red" : "text-v-green")}>
+                    {(ctx.recent?.delta ?? 0) < 0 ? <TrendingDown className="w-3 h-3" /> : <TrendingUp className="w-3 h-3" />}
+                    {(ctx.recent?.delta ?? 0) < 0 ? "−" : "+"}{formatCurrency(Math.abs(ctx.recent?.delta ?? 0))}
                   </p>
                 </div>
                 <div className="p-2 rounded-lg bg-secondary/50 border border-border">
@@ -739,7 +779,13 @@ export default function OutreachPlanner() {
                             <p className="text-sm text-foreground italic leading-relaxed">{step.callPrep.close}</p>
                           </div>
                         </div>
-                        <Button size="sm" variant="outline">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => window.open(
+                            `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(`${account.name} — strategy call`)}&add=${encodeURIComponent(account.contactEmail)}`
+                          )}
+                        >
                           <Calendar className="w-3.5 h-3.5" /> Schedule Call
                         </Button>
                       </div>
@@ -772,17 +818,17 @@ export default function OutreachPlanner() {
                               : <><Copy className="w-3.5 h-3.5" /> Copy</>}
                           </Button>
                           {step.channel === "email" && (
-                            <Button size="sm" onClick={() => window.open(`mailto:${account.contactEmail}?subject=${encodeURIComponent(step.subject || "")}&body=${encodeURIComponent(step.body || "")}`)}>
+                            <Button size="sm" onClick={() => window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(account.contactEmail)}&su=${encodeURIComponent(step.subject || "")}&body=${encodeURIComponent(step.body || "")}`)}>
                               <Mail className="w-3.5 h-3.5" /> Open in Gmail
                             </Button>
                           )}
                           {step.channel === "gchat" && (
-                            <Button size="sm" variant="outline">
+                            <Button size="sm" variant="outline" onClick={() => window.open("https://chat.google.com/")}>
                               <Send className="w-3.5 h-3.5" /> Open GChat
                             </Button>
                           )}
                           {step.channel === "linkedin" && (
-                            <Button size="sm" variant="outline">
+                            <Button size="sm" variant="outline" onClick={() => window.open(`https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(`${account.contactName} ${account.name}`)}`)}>
                               <ExternalLink className="w-3.5 h-3.5" /> Open LinkedIn
                             </Button>
                           )}

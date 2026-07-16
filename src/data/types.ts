@@ -77,6 +77,7 @@ export interface OrgAlert {
   title: string;
   summary: string;
   source: string;
+  sourceUrl?: string; // link to the verifiable public source
   date: string;
   urgency: "high" | "medium" | "low";
   actionSuggestion: string;

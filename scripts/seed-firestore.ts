@@ -49,6 +49,18 @@ async function main() {
   await db.collection("meta").doc("billingAdjustments").set({ items: clean(BILLING_ADJUSTMENTS) });
   console.log("  meta: live, aiAdoption, billingDocs, billingDocsMtd, billingAdjustments");
 
+  // Weekly brief — fetched from Confluence (PSR "Product Brief" pages) via
+  // Claude/MCP into scripts/data/weekly-brief.json; there is no Confluence
+  // credential in this repo, so the fetch is a manual/assistant step.
+  try {
+    const { readFileSync } = await import("node:fs");
+    const brief = JSON.parse(readFileSync(new URL("./data/weekly-brief.json", import.meta.url), "utf8"));
+    await db.collection("meta").doc("weeklyBrief").set(clean(brief));
+    console.log(`  meta/weeklyBrief: "${brief.title}" (fetched ${brief.fetchedAt})`);
+  } catch {
+    console.log("  meta/weeklyBrief: scripts/data/weekly-brief.json not found — skipping (existing value preserved)");
+  }
+
   // Gemini API key — read from env at seed time, never committed to git.
   // Pass via: GEMINI_API_KEY=AIza... npx tsx scripts/seed-firestore.ts
   const geminiApiKey = process.env.GEMINI_API_KEY ?? null;

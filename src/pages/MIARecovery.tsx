@@ -3,12 +3,15 @@ import { Header } from "@/components/layout/Header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { cn, formatCurrency, formatDate, daysSince, getQoQBaseMRR } from "@/lib/utils";
+import { cn, formatCurrency, formatDate, daysSince, getLatestMRR, recentDeltaMRR, formatMonthLabel } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { useAM } from "@/context/AMContext";
 import { signInWithPopup, GoogleAuthProvider } from "firebase/auth";
 import { auth, gmailProvider } from "@/lib/firebase";
-import { fetchLastEmailDates, saveGmailToken, loadGmailToken, clearGmailToken } from "@/lib/gmail";
+import {
+  fetchLastEmailDates, saveGmailToken, loadGmailToken, clearGmailToken,
+  saveGmailDates, loadGmailDates, GmailAuthError,
+} from "@/lib/gmail";
 import type { Account, OrgAlert } from "@/data/types";
 import {
   Clock, TrendingDown, AlertTriangle, ShieldAlert,
@@ -31,6 +34,7 @@ interface Blocker {
   urgency: "high" | "medium" | "low";
   action: string;
   alertId?: string;
+  situation?: string; // override for the outreach sequence type (e.g. "mia")
 }
 
 // ─── Category metadata ─────────────────────────────────────────────────────────
@@ -68,62 +72,70 @@ function buildBlockers(
   const blockers: Blocker[] = [];
 
   for (const account of accounts) {
-    const latest = account.revenueHistory[account.revenueHistory.length - 1];
-    const latestMRR = latest?.mrr ?? account.mrr;
-    const qoqBase = getQoQBaseMRR(account.revenueHistory);
-    const qoqDelta = latestMRR - qoqBase;
-    const lastContact = effectiveLastContact(account, gmailDates);
-    const days = daysSince(lastContact);
+    const latestMRR = getLatestMRR(account.revenueHistory);
+    const recent = recentDeltaMRR(account.revenueHistory);
 
-    // 1. Engagement gap
-    if (days >= 30) {
-      blockers.push({
-        id: `${account.id}-engagement`,
-        category: "engagement",
-        account,
-        headline: days >= 45
-          ? `No contact in ${days} days — MIA`
-          : `${days} days since last contact`,
-        detail: `Last contact: ${formatDate(lastContact)}. ${days >= 45
-          ? "Past MIA threshold — silent churn risk is elevated."
-          : "Approaching MIA threshold. A proactive touch now prevents a recovery sequence later."}`,
-        mrrAtRisk: account.mrr,
-        urgency: days >= 45 ? "high" : "medium",
-        action: "Start outreach sequence",
-      });
+    // 1. Engagement gap — ONLY from real Gmail signal. account.lastMeeting is
+    // a static seed date that nothing updates, so deriving MIA from it flags
+    // partners we talk to daily. No Gmail data → no engagement claim.
+    if (gmailDates[account.id]) {
+      const lastContact = effectiveLastContact(account, gmailDates);
+      const days = daysSince(lastContact);
+      if (days >= 30) {
+        blockers.push({
+          id: `${account.id}-engagement`,
+          category: "engagement",
+          account,
+          headline: days >= 45
+            ? `No contact in ${days} days — MIA`
+            : `${days} days since last contact`,
+          detail: `Last email activity: ${formatDate(lastContact)}. ${days >= 45
+            ? "Past MIA threshold — silent churn risk is elevated."
+            : "Approaching MIA threshold. A proactive touch now prevents a recovery sequence later."}`,
+          mrrAtRisk: latestMRR,
+          urgency: days >= 45 ? "high" : "medium",
+          action: "Start outreach sequence",
+          situation: "mia",
+        });
+      }
     }
 
-    // 2. Billing decline
-    if (qoqDelta < -500) {
+    // 2. Billing decline over the last 60 days (last closed month vs two
+    // months prior — the previous QoQ compare was baseline-vs-itself and
+    // never fired).
+    if (recent && recent.delta < -500) {
       blockers.push({
         id: `${account.id}-billing`,
         category: "billing",
         account,
-        headline: `Billing down ${formatCurrency(Math.abs(qoqDelta))} QoQ`,
-        detail: `${latest?.week ?? "Latest"}: ${formatCurrency(latestMRR)} vs ${formatCurrency(qoqBase)} at Mar 2026 close. ${account.notes ? account.notes : "Review product mix and usage before the end of the quarter."}`,
-        mrrAtRisk: Math.abs(qoqDelta),
-        urgency: qoqDelta < -2000 ? "high" : "medium",
+        headline: `Billing down ${formatCurrency(Math.abs(recent.delta))} in 60 days`,
+        detail: `${formatMonthLabel(recent.toLabel)}: ${formatCurrency(recent.to)} vs ${formatCurrency(recent.from)} in ${formatMonthLabel(recent.fromLabel)}. Review product mix and usage before the end of the quarter.`,
+        mrrAtRisk: Math.abs(recent.delta),
+        urgency: recent.delta < -2000 ? "high" : "medium",
         action: "Recovery outreach",
       });
     }
 
     // 3. AI adoption gap
-    if (account.products.length === 0 && account.mrr > 0) {
+    if (account.products.length === 0 && latestMRR > 0) {
       blockers.push({
         id: `${account.id}-ai-adoption`,
         category: "ai-adoption",
         account,
         headline: "No AI products active",
-        detail: `${formatCurrency(account.mrr)}/mo in billings with zero AI product adoption. ${account.vertical} partners typically see the highest retention lift from Reputation AI Pro or Conversations AI — worth a dedicated conversation.`,
+        detail: `${formatCurrency(latestMRR)}/mo in billings with zero AI product adoption. ${account.vertical} partners typically see the highest retention lift from Reputation AI Pro or Conversations AI — worth a dedicated conversation.`,
         mrrAtRisk: 0,
-        urgency: account.mrr > 5000 ? "high" : "medium",
+        urgency: latestMRR > 5000 ? "high" : "medium",
         action: "AI adoption conversation",
       });
     }
 
-    // 4. At-risk / churning (skip if billing already covers it)
+    // 4. At-risk / churning. The health flag is a static April seed, so it
+    // must be corroborated by live revenue actually declining — otherwise
+    // recovered partners (e.g. ApartmentRatings) stay flagged forever.
     if (
       (account.health === "churning" || account.health === "at-risk") &&
+      recent && recent.delta < -250 &&
       !blockers.some(b => b.account.id === account.id && b.category === "billing")
     ) {
       blockers.push({
@@ -131,10 +143,8 @@ function buildBlockers(
         category: "at-risk",
         account,
         headline: account.health === "churning" ? "Partner is churning" : "Partner marked at-risk",
-        detail: account.notes
-          ? account.notes
-          : `Health: ${account.health}. No billing decline detected — risk is likely relationship or adoption related. Needs a direct conversation.`,
-        mrrAtRisk: account.mrr,
+        detail: `Billings ${formatCurrency(recent.to)} in ${formatMonthLabel(recent.toLabel)}, down from ${formatCurrency(recent.from)} in ${formatMonthLabel(recent.fromLabel)}.${account.notes ? ` ${account.notes}` : ""}`,
+        mrrAtRisk: latestMRR,
         urgency: account.health === "churning" ? "high" : "medium",
         action: "Save conversation",
       });
@@ -177,9 +187,10 @@ export default function TopBlockers() {
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const [gmailToken, setGmailToken] = useState<string | null>(() => loadGmailToken());
-  const [gmailDates, setGmailDates] = useState<Record<string, string>>({});
+  const [gmailDates, setGmailDates] = useState<Record<string, string>>(() => loadGmailDates() ?? {});
   const [gmailLoading, setGmailLoading] = useState(false);
   const [gmailError, setGmailError] = useState<string | null>(null);
+  const [hasSynced, setHasSynced] = useState(() => loadGmailDates() !== null);
 
   const syncGmail = useCallback(async (token: string) => {
     setGmailLoading(true);
@@ -187,20 +198,26 @@ export default function TopBlockers() {
     try {
       const dates = await fetchLastEmailDates(token, accounts);
       setGmailDates(dates);
-    } catch {
-      setGmailError("Sync failed — reconnect below.");
-      clearGmailToken();
-      setGmailToken(null);
+      saveGmailDates(dates);
+      setHasSynced(true);
+    } catch (e) {
+      if (e instanceof GmailAuthError) {
+        setGmailError("Gmail session expired — reconnect below.");
+        clearGmailToken();
+        setGmailToken(null);
+      } else {
+        setGmailError("Sync failed — try refreshing.");
+      }
     } finally {
       setGmailLoading(false);
     }
   }, [accounts]);
 
   useEffect(() => {
-    if (gmailToken && accounts.length > 0 && Object.keys(gmailDates).length === 0) {
+    if (gmailToken && accounts.length > 0 && !hasSynced && !gmailLoading) {
       syncGmail(gmailToken);
     }
-  }, [gmailToken, accounts, gmailDates, syncGmail]);
+  }, [gmailToken, accounts, hasSynced, gmailLoading, syncGmail]);
 
   async function connectGmail() {
     setGmailError(null);
@@ -248,8 +265,8 @@ export default function TopBlockers() {
             : <WifiOff className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
           <span className="flex-1 text-muted-foreground">
             {gmailToken
-              ? "Gmail connected — engagement gaps include last email activity, not just meetings"
-              : "Connect Gmail for more accurate engagement tracking (email + meeting combined)"}
+              ? "Gmail connected — engagement gaps are computed from real email activity"
+              : "Connect Gmail to compute engagement gaps. Without it, engagement blockers are hidden (stored meeting dates are stale and would flag false MIAs)."}
             {gmailError && <span className="text-v-red ml-2">{gmailError}</span>}
           </span>
           {gmailToken ? (
@@ -383,11 +400,12 @@ export default function TopBlockers() {
                     <div className="flex gap-2 mt-3 flex-wrap">
                       <Button
                         size="sm"
-                        onClick={() => navigate(
-                          blocker.alertId
-                            ? `/outreach?account=${blocker.account.id}&intel=${blocker.alertId}`
-                            : `/outreach?account=${blocker.account.id}`
-                        )}
+                        onClick={() => {
+                          const params = new URLSearchParams({ account: blocker.account.id });
+                          if (blocker.alertId) params.set("intel", blocker.alertId);
+                          if (blocker.situation) params.set("situation", blocker.situation);
+                          navigate(`/outreach?${params.toString()}`);
+                        }}
                       >
                         {blocker.action} <ArrowRight className="w-3.5 h-3.5" />
                       </Button>
