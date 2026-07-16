@@ -37,10 +37,10 @@ const SERIES_START = "2025-11-01";
 const sdkBq = join(homedir(), "Downloads/google-cloud-sdk/bin/bq");
 const BQ = existsSync(sdkBq) ? sdkBq : "bq";
 
-function bq(sql) {
+function bq(sql, maxRows = 10000) {
   const out = execFileSync(
     BQ,
-    ["query", `--project_id=${PROJECT}`, "--use_legacy_sql=false", "--format=json", "--max_rows=10000", sql],
+    ["query", `--project_id=${PROJECT}`, "--use_legacy_sql=false", "--format=json", `--max_rows=${maxRows}`, sql],
     { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
   );
   const start = out.indexOf("[");
@@ -241,6 +241,35 @@ for (const r of productQuery(currentMonthStart, "COUNT(DISTINCT s.customer_snk) 
 for (const list of Object.values(productsByAgid)) list.sort((a, b) => b.mrr - a.mrr);
 console.log(`product breakdown: ${Object.keys(productsByAgid).length} partners (+${appended} current-month-only SKUs)`);
 
+// ── 2c-bis. Product-level monthly HISTORY per partner ───────────────────────
+// Per-SKU billings for every full month since SERIES_START — this is what
+// lets the app answer "why did this partner's billings move" at the product
+// level instead of the partner level.
+console.log("Pulling product-level monthly history per partner…");
+const histRows = bq(`
+  SELECT p.vmf_account_group_id AS agid, CAST(d.date AS STRING) AS month,
+         pr.name AS sku,
+         COALESCE(NULLIF(pr.inclusion_category, 'Unknown'), 'Other') AS category,
+         ROUND(SUM(s.total_reporting), 2) AS mrr
+  FROM \`${PROJECT}.management.f_billing_partner_customer_product_snpm\` s
+  JOIN \`${PROJECT}.management.dim_date\` d ON s.projected_month_date_sk = d.date_sk
+  JOIN \`${PROJECT}.management.dim_current_partner\` p ON s.partner_snk = p.partner_snk
+  JOIN \`${PROJECT}.management.dim_current_user\` u ON s.assigned_sales_person_snk = u.user_snk
+  JOIN \`${PROJECT}.management.dim_current_product\` pr ON s.product_snk = pr.product_snk
+  WHERE u.work_email IN (${EMAILS_SQL})
+    AND d.date >= '${SERIES_START}' AND d.date < '${currentMonthStart}'
+  GROUP BY 1, 2, 3, 4
+  HAVING ABS(mrr) > 0.005`, 100000);
+const productHistoryByAgid = {};
+for (const r of histRows) {
+  if (!r.agid) continue;
+  const sku = String(r.sku).trim();
+  const byAgid = (productHistoryByAgid[r.agid] ??= {});
+  const entry = (byAgid[sku] ??= { category: r.category, byMonth: {} });
+  entry.byMonth[monthLabel(r.month)] = Number(r.mrr);
+}
+console.log(`product history: ${histRows.length} sku-month rows across ${Object.keys(productHistoryByAgid).length} partners`);
+
 // ── 2d. Monthly commissionable per partner (SKU-level comp-plan rates) ──────
 // SUM(total_reporting × dim_current_product.inclusion_rate) — the same math
 // finance's rep-wise "Data" tab applies (revenue_reporting_net × inclusion_rate
@@ -309,6 +338,12 @@ ${liveEntries.join("\n")}
 // product's comp-plan inclusion_rate. Sums reconcile to the partner's book.
 export const LIVE_PRODUCTS: Record<string, LiveProduct[]> = {
 ${Object.entries(productsByAgid).map(([agid, items]) => `  "${agid}": ${JSON.stringify(items)},`).join("\n")}
+};
+
+// Per-partner per-SKU monthly billing history (full months). The "why" layer:
+// per-product movement between any two months.
+export const LIVE_PRODUCT_HISTORY: Record<string, Record<string, { category: string; byMonth: Record<string, number> }>> = {
+${Object.entries(productHistoryByAgid).map(([agid, skus]) => `  "${agid}": ${JSON.stringify(skus)},`).join("\n")}
 };
 
 // Per-partner monthly commissionable at SKU-level comp-plan rates

@@ -1,4 +1,4 @@
-import { LIVE_BILLINGS, LIVE_PRODUCTS, LIVE_META } from "./live";
+import { LIVE_BILLINGS, LIVE_PRODUCTS, LIVE_PRODUCT_HISTORY, LIVE_META } from "./live";
 import type { Account, AMProfile } from "./mock";
 
 export { LIVE_META };
@@ -10,11 +10,13 @@ export function withLiveBillings(accounts: Account[]): Account[] {
   return accounts.map(a => {
     const live = a.agid ? LIVE_BILLINGS[a.agid] : undefined;
     const products = a.agid ? LIVE_PRODUCTS[a.agid] : undefined;
-    if (!live && !products) return a;
+    const history = a.agid ? LIVE_PRODUCT_HISTORY[a.agid] : undefined;
+    if (!live && !products && !history) return a;
     return {
       ...a,
       ...(live ? { revenueHistory: live.months, mtdBilling: live.mtd ?? undefined } : {}),
       ...(products && products.length ? { productBreakdown: products } : {}),
+      ...(history ? { productHistory: history } : {}),
     };
   });
 }

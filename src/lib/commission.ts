@@ -29,14 +29,48 @@ function knownComm(account: Account, week: string): number | undefined {
   return SHEET_COMM[account.agid]?.[week] ?? LIVE_COMM[account.agid]?.[week];
 }
 
-// ── Quarter config — the one place to roll forward each quarter ─────────────
-export const QUARTER = {
-  label: "Q3 2026",
-  months: ["Jul 26", "Aug 26", "Sep 26"],
-  monthNames: ["July", "August", "September"],
-  baselineWeek: "Jun 26",        // prior-quarter close = Month 1 cohort start
-  newSignCutoff: "2026-07-01",   // partners signed on/after are excluded from growth
-};
+// ── Quarter configs — add Q4 2026 here when it opens ────────────────────────
+export interface QuarterConfig {
+  label: string;
+  months: string[];
+  monthNames: string[];
+  baselineWeek: string;      // prior-quarter close = Month 1 cohort start
+  newSignCutoff: string;     // partners signed on/after are excluded from growth
+}
+
+export const QUARTERS: QuarterConfig[] = [
+  {
+    label: "Q1 2026",
+    months: ["Jan 26", "Feb 26", "Mar 26"],
+    monthNames: ["January", "February", "March"],
+    baselineWeek: "Dec 25",
+    newSignCutoff: "2026-01-01",
+  },
+  {
+    label: "Q2 2026",
+    months: ["Apr 26", "May 26", "Jun 26"],
+    monthNames: ["April", "May", "June"],
+    baselineWeek: "Mar 26",
+    newSignCutoff: "2026-04-01",
+  },
+  {
+    label: "Q3 2026",
+    months: ["Jul 26", "Aug 26", "Sep 26"],
+    monthNames: ["July", "August", "September"],
+    baselineWeek: "Jun 26",
+    newSignCutoff: "2026-07-01",
+  },
+];
+
+// The in-progress quarter — the one place to roll forward each quarter.
+export const QUARTER = QUARTERS[2];
+
+// Chronological ordering for month labels ("Jul 26" → comparable number).
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+function monthOrd(week: string): number {
+  const [m, y] = week.split(" ");
+  return (2000 + Number(y)) * 12 + MONTH_NAMES.indexOf(m);
+}
 
 export const COMMISSION_TIERS = [
   { wamgr: 0.0000, rate: 0.0060, label: "0.00%" },
@@ -122,6 +156,13 @@ export interface QuarterFinal {
   totalCAD: number;
 }
 
+// Finance-published finals keyed by quarter label. When a selected quarter has
+// a final for the AM, the outlook is built from it verbatim — finance's word
+// beats the warehouse for paid quarters.
+export const FINANCE_FINALS: Record<string, Record<string, QuarterFinal>> = {
+  "Q2 2026": {}, // populated below from PRIOR_QUARTER_FINAL to keep one source
+};
+
 export const PRIOR_QUARTER_FINAL: Record<string, QuarterFinal> = {
   tanmay: {
     quarter: "Q2 2026",
@@ -158,6 +199,66 @@ export const PRIOR_QUARTER_FINAL: Record<string, QuarterFinal> = {
     totalCAD: 28961.46,
   },
 };
+
+// Keep one source of truth: PRIOR_QUARTER_FINAL holds the Q2-2026 payout-sheet
+// data; FINANCE_FINALS indexes the same records by quarter label so any
+// quarter's outlook can resolve them.
+for (const [amId, final] of Object.entries(PRIOR_QUARTER_FINAL)) {
+  FINANCE_FINALS[final.quarter] ??= {};
+  FINANCE_FINALS[final.quarter][amId] = final;
+}
+
+// Build a QuarterOutlook from a finance-published final — every month is
+// status "final" and the payout figures are the sheet's, verbatim. The
+// finance sheet treats the book as USD × FX (verified: Adam's Q2 total
+// reproduces exactly as rate × bookUnderManagement × 1.4 + retention).
+function outlookFromFinal(f: QuarterFinal, quarter: QuarterConfig): QuarterOutlook {
+  const months: QuarterMonth[] = f.months.map((m, i) => ({
+    week: m.week,
+    name: quarter.monthNames[i] ?? m.week,
+    start: m.start,
+    end: m.end,
+    diff: m.end - m.start,
+    status: "final",
+  }));
+  const tier = getCommissionTier(f.wamgr);
+  const nextTier = getNextCommissionTier(f.wamgr);
+  const bookGrowthCommissionCAD = f.totalCAD - f.retentionBonusCAD;
+  const tierTargets: TierTarget[] = COMMISSION_TIERS.map(t => {
+    const netGrowthNeeded = t.wamgr * f.adjustedBook;
+    return {
+      ...t,
+      netGrowthNeeded,
+      quarterCloseNeeded: months[0].start + netGrowthNeeded,
+      gapFromProjection: netGrowthNeeded - f.netQuarterlyGrowth,
+      estPayoutCAD: t.rate * f.bookUnderManagement * f.fx,
+    };
+  });
+  return {
+    quarter: f.quarter,
+    months,
+    baselineIsFinal: true,
+    baselineWarehouseDelta: 0,
+    adjustedBook: f.adjustedBook,
+    bookUnderManagement: f.bookUnderManagement,
+    netQuarterlyGrowth: f.netQuarterlyGrowth,
+    wamgr: f.wamgr,
+    tier, nextTier,
+    bookUSD: f.bookUnderManagement,
+    bookCAD: 0,
+    bookGrowthCommissionCAD,
+    cohortSize: f.months[0]?.logosStart ?? 0,
+    retentionPct: f.retentionPct,
+    retentionBonusCAD: f.retentionBonusCAD,
+    retentionOneLossPct: f.retentionPct,
+    retentionOneLossBonusCAD: f.retentionBonusCAD,
+    projectedCommissionCAD: f.totalCAD,
+    gapToNextTier: nextTier ? Math.max(0, nextTier.wamgr * f.adjustedBook - f.netQuarterlyGrowth) : 0,
+    nextTierUpliftCAD: nextTier ? (nextTier.rate - tier.rate) * f.bookUnderManagement * f.fx : 0,
+    tierTargets,
+    paceFactor: 1,
+  };
+}
 
 // One-time billing artifacts (loaded from Firestore — they name a partner and
 // credit note, so they're confidential and never bundled). NOT applied to
@@ -207,13 +308,13 @@ function onboardingComm(account: Account): number {
     .reduce((s, p) => s + p.commissionable, 0);
 }
 
-// Partners eligible for the current quarter's growth math: billing, and not
-// newly signed in-quarter (finance excludes those from the growth cohort).
-export function quarterEligiblePartners(accounts: Account[]): Account[] {
+// Partners eligible for a quarter's growth math: billing, and not newly
+// signed in-quarter (finance excludes those from the growth cohort).
+export function quarterEligiblePartners(accounts: Account[], quarter: QuarterConfig = QUARTER): Account[] {
   return accounts.filter(a =>
-    new Date(a.onboardedDate) < new Date(QUARTER.newSignCutoff) &&
+    new Date(a.onboardedDate) < new Date(quarter.newSignCutoff) &&
     (a.mrr > 0 ||
-      (a.revenueHistory.find(h => h.week === QUARTER.baselineWeek)?.mrr ?? 0) > 0 ||
+      (a.revenueHistory.find(h => h.week === quarter.baselineWeek)?.mrr ?? 0) > 0 ||
       (a.mtdBilling?.mrr ?? 0) > 0)
   );
 }
@@ -316,17 +417,26 @@ export interface QuarterOutlook {
   paceFactor: number;
 }
 
-export function computeQuarterOutlook(accounts: Account[], amId: string): QuarterOutlook {
-  const eligible = quarterEligiblePartners(accounts);
+export function computeQuarterOutlook(
+  accounts: Account[],
+  amId: string,
+  quarter: QuarterConfig = QUARTER
+): QuarterOutlook {
+  // A finance-published final for this exact quarter beats any computation.
+  const financeFinal = FINANCE_FINALS[quarter.label]?.[amId];
+  if (financeFinal) return outlookFromFinal(financeFinal, quarter);
+
+  const eligible = quarterEligiblePartners(accounts, quarter);
   const paceFactor = mtdPaceFactor(amId);
   const mtdLabel = getLiveMeta().mtdLabel;
-  const currentIdx = QUARTER.months.indexOf(mtdLabel); // -1 once the quarter is fully closed
+  const mtdOrd = monthOrd(mtdLabel);
 
   // Month 1 cohort start = prior-quarter close. Prefer finance's verified
   // number (the payout sheet) over the warehouse sum — June's warehouse data
   // carries one-time invoice items finance excludes from the growth basis.
-  const final = PRIOR_QUARTER_FINAL[amId];
-  const warehouseBaseline = monthlyCommissionable(eligible, QUARTER.baselineWeek);
+  const prevQuarterLabel = QUARTERS[QUARTERS.findIndex(q => q.label === quarter.label) - 1]?.label;
+  const final = prevQuarterLabel ? FINANCE_FINALS[prevQuarterLabel]?.[amId] : undefined;
+  const warehouseBaseline = monthlyCommissionable(eligible, quarter.baselineWeek);
   const financeBaseline = final?.months[final.months.length - 1]?.end;
   const m1Start = financeBaseline ?? warehouseBaseline;
   const baselineIsFinal = financeBaseline !== undefined;
@@ -334,24 +444,25 @@ export function computeQuarterOutlook(accounts: Account[], amId: string): Quarte
 
   const months: QuarterMonth[] = [];
   let prevEnd = m1Start;
-  QUARTER.months.forEach((week, i) => {
+  quarter.months.forEach((week, i) => {
     const start = prevEnd;
+    const ord = monthOrd(week);
     let end: number;
     let status: QuarterMonth["status"];
     if (isMonthActual(eligible, week)) {
       end = monthlyCommissionable(eligible, week);
       status = "final";
-    } else if (currentIdx !== -1 && i < currentIdx) {
+    } else if (ord < mtdOrd) {
       end = monthlyCommissionable(eligible, week);
       status = "closed";
-    } else if (i === currentIdx) {
+    } else if (ord === mtdOrd) {
       end = start * paceFactor;
       status = "inProgress";
     } else {
       end = start; // hold flat — no signal yet for future months
       status = "assumed";
     }
-    months.push({ week, name: QUARTER.monthNames[i], start, end, diff: end - start, status });
+    months.push({ week, name: quarter.monthNames[i], start, end, diff: end - start, status });
     prevEnd = end;
   });
 
@@ -365,7 +476,7 @@ export function computeQuarterOutlook(accounts: Account[], amId: string): Quarte
 
   // Currency split: real split for finance-published months; projected months
   // inherit the baseline month's CAD share (Cantrex + Home.CA bill in CAD).
-  const baseSplit = monthlyCommissionableSplit(eligible, QUARTER.baselineWeek);
+  const baseSplit = monthlyCommissionableSplit(eligible, quarter.baselineWeek);
   const baseCadShare = baseSplit.usd + baseSplit.cad > 0
     ? baseSplit.cad / (baseSplit.usd + baseSplit.cad) : 0;
   let bookUSD = 0, bookCAD = 0;
@@ -386,7 +497,7 @@ export function computeQuarterOutlook(accounts: Account[], amId: string): Quarte
   // what a single cancellation does to the bonus.
   const countActive = (week: string) =>
     eligible.filter(a => (a.revenueHistory.find(h => h.week === week)?.mrr ?? 0) > 0).length;
-  const cohortSize = countActive(QUARTER.baselineWeek);
+  const cohortSize = countActive(quarter.baselineWeek);
   let retentionSum = 0;
   let prevCount = cohortSize;
   for (const m of months) {
@@ -427,7 +538,7 @@ export function computeQuarterOutlook(accounts: Account[], amId: string): Quarte
     : 0;
 
   return {
-    quarter: QUARTER.label,
+    quarter: quarter.label,
     months,
     baselineIsFinal, baselineWarehouseDelta,
     adjustedBook, bookUnderManagement, netQuarterlyGrowth, wamgr,

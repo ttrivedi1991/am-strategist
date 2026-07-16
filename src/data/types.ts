@@ -44,6 +44,9 @@ export interface Account {
   lastActivity: string;
   products: string[];
   productBreakdown: Array<{ name: string; category: string; mrr: number; commissionable: number; quantity?: number }>;
+  // Per-SKU monthly billing history (full months, from BigQuery) — powers
+  // product-level movement attribution ("why did billings move").
+  productHistory?: Record<string, { category: string; byMonth: Record<string, number> }>;
   website: string;
   notes: string;
   isMIA: boolean;

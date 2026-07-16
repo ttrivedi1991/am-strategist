@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useAM } from "@/context/AMContext";
 import { formatCurrency, formatMonthLabel } from "@/lib/utils";
 import {
-  COMMISSION_TIERS, RETENTION_TIERS, USD_TO_CAD, QUARTER, blendedRate,
+  COMMISSION_TIERS, RETENTION_TIERS, USD_TO_CAD, QUARTER, QUARTERS, blendedRate,
   computeQuarterOutlook, monthlyCommissionable, mtdCommissionable, quarterEligiblePartners,
   accountMonthlyCommissionable, getRetentionTier, getNextRetentionTier, PRIOR_QUARTER_FINAL,
 } from "@/lib/commission";
@@ -59,6 +59,12 @@ export default function Commission() {
   // Shared commission math (src/lib/commission.ts) — the finance-sheet model:
   // monthly cohort start → end diffs; WAMGR = net growth ÷ Σ month starts.
   const outlook = computeQuarterOutlook(accounts, selectedAM.id);
+
+  // QoQ comparison — every configured quarter through the same engine
+  // (finance finals win where published; Q4 joins when added to QUARTERS).
+  const [compareQ, setCompareQ] = useState(QUARTER.label);
+  const quarterOutlooks = QUARTERS.map(q => ({ q, o: computeQuarterOutlook(accounts, selectedAM.id, q) }));
+  const selectedCompare = quarterOutlooks.find(x => x.q.label === compareQ) ?? quarterOutlooks[quarterOutlooks.length - 1];
   const {
     months, adjustedBook, bookUnderManagement, netQuarterlyGrowth, wamgr,
     tier: currentTier, nextTier, bookUSD, bookCAD, bookGrowthCommissionCAD,
@@ -231,6 +237,98 @@ export default function Commission() {
       </div>}
 
       {tab === "overview" && <div className="p-6 space-y-6">
+        {/* ── QoQ growth comparison ── */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <CardTitle>Quarter-over-Quarter Growth</CardTitle>
+              <div className="flex items-center gap-1">
+                {quarterOutlooks.map(({ q }) => (
+                  <button
+                    key={q.label}
+                    onClick={() => setCompareQ(q.label)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+                      compareQ === q.label ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"
+                    }`}
+                  >
+                    {q.label}
+                  </button>
+                ))}
+                <span className="text-[10px] text-muted-foreground ml-1">Q4 joins when it opens</span>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* All quarters side by side */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs min-w-[640px]">
+                <thead>
+                  <tr className="text-left text-[10px] text-muted-foreground uppercase tracking-wide border-b border-border">
+                    <th className="py-2 pr-3 font-semibold">Quarter</th>
+                    <th className="py-2 px-3 font-semibold text-right">Baseline (M1 start)</th>
+                    <th className="py-2 px-3 font-semibold text-right">Quarter Close</th>
+                    <th className="py-2 px-3 font-semibold text-right">Net Growth</th>
+                    <th className="py-2 px-3 font-semibold text-right">WAMGR</th>
+                    <th className="py-2 px-3 font-semibold">Tier</th>
+                    <th className="py-2 px-3 font-semibold text-right">Payout (CAD)</th>
+                    <th className="py-2 pl-3 font-semibold">Basis</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {quarterOutlooks.map(({ q, o }) => {
+                    const isCurrent = q.label === QUARTER.label;
+                    const isFinanceFinal = o.months.every(m => m.status === "final") && o.baselineIsFinal;
+                    return (
+                      <tr key={q.label} className={compareQ === q.label ? "bg-secondary/40" : ""}>
+                        <td className="py-2 pr-3 font-semibold text-foreground">{q.label}</td>
+                        <td className="py-2 px-3 text-right tnum">{formatCurrency(o.months[0]?.start ?? 0)}</td>
+                        <td className="py-2 px-3 text-right tnum font-semibold">{formatCurrency(o.months[o.months.length - 1]?.end ?? 0)}</td>
+                        <td className={`py-2 px-3 text-right tnum font-semibold ${o.netQuarterlyGrowth < 0 ? "text-v-red" : "text-v-green"}`}>
+                          {o.netQuarterlyGrowth >= 0 ? "+" : "−"}{formatCurrency(Math.abs(o.netQuarterlyGrowth))}
+                        </td>
+                        <td className={`py-2 px-3 text-right tnum font-bold ${o.wamgr < 0 ? "text-v-red" : "text-v-green"}`}>
+                          {(o.wamgr * 100).toFixed(2)}%
+                        </td>
+                        <td className="py-2 px-3">{o.tier.label === "negative" ? "below 0%" : o.tier.label}</td>
+                        <td className="py-2 px-3 text-right tnum font-semibold">{formatCurrency(o.projectedCommissionCAD)}</td>
+                        <td className="py-2 pl-3 text-muted-foreground">
+                          {isFinanceFinal ? "finance final" : isCurrent ? "in progress · projected" : "warehouse-derived"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Selected quarter month-by-month cohort */}
+            <div className="rounded-lg border border-border overflow-hidden">
+              <div className="px-3 py-2 bg-secondary/50 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                {selectedCompare.q.label} month-by-month (cohort start → end)
+              </div>
+              <table className="w-full text-xs">
+                <tbody className="divide-y divide-border">
+                  {selectedCompare.o.months.map(m => (
+                    <tr key={m.week}>
+                      <td className="px-3 py-1.5 font-medium text-foreground">{m.name}</td>
+                      <td className="px-3 py-1.5 text-right tnum">{formatCurrency(m.start)}</td>
+                      <td className="px-1 py-1.5 text-center text-muted-foreground">→</td>
+                      <td className="px-3 py-1.5 text-right tnum font-semibold">{formatCurrency(m.end)}</td>
+                      <td className={`px-3 py-1.5 text-right tnum font-semibold ${m.diff < 0 ? "text-v-red" : "text-v-green"}`}>
+                        {m.diff >= 0 ? "+" : "−"}{formatCurrency(Math.abs(m.diff))}
+                      </td>
+                      <td className="px-3 py-1.5 text-right text-[10px] text-muted-foreground">{MONTH_STATUS_LABEL[m.status]}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-[10px] text-muted-foreground">
+              Same WAMGR model for every quarter: net growth = Σ (month end − start), WAMGR = net growth ÷ Σ month starts. Finance-published finals override warehouse math where they exist (Q2 2026). Q1 2026 is warehouse-derived — finance's Q1 statement isn't loaded.
+            </p>
+          </CardContent>
+        </Card>
+
         {/* ── In-month standing (live) ── */}
         <div className="flex items-start gap-3 p-4 rounded-xl bg-v-blue/5 border border-v-blue/20">
           <DollarSign className="w-4 h-4 text-v-blue mt-0.5 shrink-0" />

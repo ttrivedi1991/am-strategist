@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAM } from "@/context/AMContext";
 import { formatCurrency, formatDate, getLatestMRR, recentDeltaMRR, commissionableMRR, formatMonthLabel } from "@/lib/utils";
-import { quarterDelta, sixMonthHistory, trendNarrative, recommendedActions, exact$, QTR } from "@/lib/insights";
+import { quarterDelta, sixMonthHistory, trendNarrative, recommendedActions, productMovers, exact$, QTR } from "@/lib/insights";
 import { loadGmailToken, fetchRecentThreads, type RecentThread } from "@/lib/gmail";
 import {
   AreaChart, Area, ResponsiveContainer, Tooltip, XAxis, YAxis,
@@ -75,6 +75,7 @@ export default function PartnerProfile() {
   const actions = recommendedActions([account], orgAlerts, 3);
   const productLines = [...account.productBreakdown].filter(p => p.mrr > 0).sort((a, b) => b.mrr - a.mrr);
   const trendUp = (recent?.delta ?? 0) >= 0;
+  const movers = productMovers(account); // per-SKU Q movement, largest first
 
   return (
     <div className="animate-fade-in">
@@ -183,6 +184,40 @@ export default function PartnerProfile() {
                 </ResponsiveContainer>
               </CardContent>
             </Card>
+
+            {/* What moved, by product — the SKU-level "why" */}
+            {movers.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>
+                    What Moved in {QTR.label} — by Product ({formatMonthLabel(QTR.from)} → {formatMonthLabel(QTR.to)})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <table className="w-full text-xs">
+                    <tbody className="divide-y divide-border">
+                      {movers.slice(0, 8).map(m => (
+                        <tr key={m.name}>
+                          <td className="px-4 py-2">
+                            <span className="font-medium text-foreground">{m.name}</span>
+                            <span className="text-muted-foreground"> · {m.category}</span>
+                          </td>
+                          <td className="px-3 py-2 text-right text-muted-foreground tnum">{exact$(m.from)} → {exact$(m.to)}</td>
+                          <td className={`px-4 py-2 text-right font-bold tnum ${m.delta < 0 ? "text-v-red" : "text-v-green"}`}>
+                            {m.delta < 0 ? "−" : "+"}{exact$(Math.abs(m.delta))}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {movers.length > 8 && (
+                    <p className="px-4 py-2 text-[10px] text-muted-foreground border-t border-border">
+                      +{movers.length - 8} smaller movements under the threshold shown.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             {/* Product mix */}
             <Card>

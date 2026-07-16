@@ -165,25 +165,64 @@ export interface BridgeDriver {
 
 const QTR_WEEKS = ["Apr 26", "May 26", "Jun 26"];
 
-function reasonFor(account: Account, orgAlerts: OrgAlert[]): string | null {
-  // One-time billing credit inside the quarter is the hardest attribution.
+// Per-product movement between two months, from the SKU-level history.
+// This is the real "why" — which products drove a partner's move.
+export interface ProductMove { name: string; category: string; delta: number; from: number; to: number }
+
+export function productMovers(account: Account, fromWeek = QTR.from, toWeek = QTR.to, minAbs = 100): ProductMove[] {
+  if (!account.productHistory) return [];
+  return Object.entries(account.productHistory)
+    .map(([name, h]) => {
+      const from = h.byMonth[fromWeek] ?? 0;
+      const to = h.byMonth[toWeek] ?? 0;
+      return { name, category: h.category, delta: to - from, from, to };
+    })
+    .filter(m => Math.abs(m.delta) >= minAbs)
+    .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+}
+
+// Short product-attribution phrase for a partner's quarter move, e.g.
+// "Conversations AI Pro −$1,180; WordPress Hosting −$240". Only names
+// products moving the same direction as the net move.
+function productAttribution(account: Account, netDelta: number): string | null {
+  const movers = productMovers(account).filter(m => Math.sign(m.delta) === Math.sign(netDelta));
+  if (movers.length === 0) return null;
+  const top = movers.slice(0, 2)
+    .map(m => `${m.name} ${m.delta < 0 ? "−" : "+"}${exact$(Math.abs(m.delta))}`)
+    .join("; ");
+  const covered = movers.slice(0, 2).reduce((s, m) => s + Math.abs(m.delta), 0);
+  const more = movers.length > 2 && Math.abs(netDelta) - covered > 250
+    ? ` and ${movers.length - 2} smaller lines`
+    : "";
+  return `${top}${more}`;
+}
+
+function reasonFor(account: Account, orgAlerts: OrgAlert[], netDelta = 0): string | null {
+  const parts: string[] = [];
+  // Product-level attribution is the most precise "why" we have.
+  const products = productAttribution(account, netDelta);
+  if (products) parts.push(products);
+  // One-time billing credit inside the quarter.
   const credit = QTR_WEEKS.reduce((s, w) => s + billingAdjustment(account.name, w), 0);
   if (Math.abs(credit) > 250) {
-    return `one-time billing credit of ${exact$(Math.abs(credit))} in the quarter`;
+    parts.push(`incl. one-time billing credit of ${exact$(Math.abs(credit))}`);
   }
-  // Verified public signal (fresh enough to plausibly relate).
-  const signal = orgAlerts
-    .filter(a => a.accountId === account.id && daysSince(a.date) <= 120)
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
-  if (signal) return signal.title;
-  return null;
+  // Verified public signal (fresh enough to plausibly relate) as context.
+  if (parts.length === 0) {
+    const signal = orgAlerts
+      .filter(a => a.accountId === account.id && daysSince(a.date) <= 120)
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+    if (signal) return signal.title;
+    return null;
+  }
+  return parts.join("; ");
 }
 
 export function bookBridge(accounts: Account[], orgAlerts: OrgAlert[]) {
   const drivers: BridgeDriver[] = accounts
     .map(a => ({ a, q: quarterDelta(a) }))
     .filter((x): x is { a: Account; q: NonNullable<ReturnType<typeof quarterDelta>> } => x.q !== null && Math.abs(x.q.delta) >= 250)
-    .map(({ a, q }) => ({ account: a, delta: q.delta, reason: reasonFor(a, orgAlerts) }));
+    .map(({ a, q }) => ({ account: a, delta: q.delta, reason: reasonFor(a, orgAlerts, q.delta) }));
 
   const from = accounts.reduce((s, a) => s + (a.revenueHistory.find(h => h.week === QTR.from)?.mrr ?? 0), 0);
   const to = accounts.reduce((s, a) => s + (a.revenueHistory.find(h => h.week === QTR.to)?.mrr ?? 0), 0);
