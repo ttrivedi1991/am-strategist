@@ -178,6 +178,27 @@ function buildBlockers(
   });
 }
 
+// One-sentence narrative per theme — the story behind the count, with the
+// partners that drive it named.
+function themeNarrative(cat: BlockerCategory, items: Blocker[]): string | null {
+  if (items.length === 0) return null;
+  const top = [...items].sort((a, b) => b.mrrAtRisk - a.mrrAtRisk).slice(0, 2);
+  const names = top.map(b => b.account.name).join(" and ");
+  const total = items.reduce((s, b) => s + b.mrrAtRisk, 0);
+  switch (cat) {
+    case "billing":
+      return `${items.length} partner${items.length > 1 ? "s" : ""} stepped down a combined ${formatCurrency(total)}/mo over the last 60 days — ${names} drive${top.length === 1 ? "s" : ""} most of it.`;
+    case "engagement":
+      return `${items.length} partner${items.length > 1 ? "s have" : " has"} genuinely gone quiet (verified against real email activity, not stale meeting dates).`;
+    case "ai-adoption":
+      return `${items.length} partner${items.length > 1 ? "s" : ""} bill${items.length === 1 ? "s" : ""} real dollars with zero AI products — the cleanest expansion lane on the book, led by ${names}.`;
+    case "at-risk":
+      return `${items.length} flagged partner${items.length > 1 ? "s" : ""} also show${items.length === 1 ? "s" : ""} live revenue decline — the flag is corroborated, not historical.`;
+    case "org-change":
+      return `${items.length} partner${items.length > 1 ? "s have" : " has"} verified organizational changes in play — each one is a timing window for outreach.`;
+  }
+}
+
 // ─── Component ─────────────────────────────────────────────────────────────────
 
 export default function TopBlockers() {
@@ -328,6 +349,25 @@ export default function TopBlockers() {
               </button>
             );
           })}
+        </div>
+
+        {/* The story behind the counts — one line per active theme */}
+        <div className="p-4 rounded-xl bg-secondary/40 border border-border space-y-1.5">
+          {(Object.keys(CATEGORY_META) as BlockerCategory[])
+            .filter(cat => activeFilter === "all" || activeFilter === cat)
+            .map(cat => {
+              const narrative = themeNarrative(cat, blockers.filter(b => b.category === cat));
+              if (!narrative) return null;
+              const meta = CATEGORY_META[cat];
+              return (
+                <p key={cat} className="text-xs text-muted-foreground leading-relaxed">
+                  <span className={cn("font-bold", meta.color)}>{meta.label}:</span> {narrative}
+                </p>
+              );
+            })}
+          {blockers.length === 0 && (
+            <p className="text-xs text-muted-foreground">No active blockers. Connect Gmail above to add engagement coverage.</p>
+          )}
         </div>
 
         {/* Blocker list */}

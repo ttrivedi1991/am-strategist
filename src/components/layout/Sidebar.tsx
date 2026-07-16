@@ -3,18 +3,19 @@ import { NavLink, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useAM } from "@/context/AMContext";
 import {
-  LayoutDashboard, Users, BrainCircuit, Bell, Send, ShieldAlert, FileText, Zap, ChevronUp, Check, LogOut, TrendingUp
+  LayoutDashboard, Users, Send, ShieldAlert, FileText, Zap, ChevronUp, Check, LogOut, TrendingUp
 } from "lucide-react";
 
+// Simplified per Bryan's Jul 16 feedback: partner-centric by default.
+// AI Adoption and Org Intelligence live inside each Partner Profile now
+// (routes still exist for deep links; they're just not primary nav).
 const NAV = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/accounts", icon: Users, label: "Accounts" },
-  { to: "/commission", icon: TrendingUp, label: "Commission", amOnly: true },
-  { to: "/ai-adoption", icon: BrainCircuit, label: "AI Adoption" },
-  { to: "/intel", icon: Bell, label: "Org Intelligence" },
-  { to: "/outreach", icon: Send, label: "Outreach Planner" },
   { to: "/mia", icon: ShieldAlert, label: "Top Blockers" },
+  { to: "/outreach", icon: Send, label: "Outreach Planner" },
   { to: "/brief", icon: FileText, label: "Weekly Brief" },
+  { to: "/commission", icon: TrendingUp, label: "Commission", amOnly: true },
 ];
 
 const AVATAR_COLORS: Record<string, string> = {

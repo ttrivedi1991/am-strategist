@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatCurrency, formatMonthLabel, pctChange, getQoQBaseMRR, getLatestMRR, QOQ_BASELINE_LABEL } from "@/lib/utils";
 import { computeQuarterOutlook, mtdCommissionable, monthlyCommissionable, billingAdjustment, QUARTER } from "@/lib/commission";
+import { recommendedActions, bookStory } from "@/lib/insights";
 
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -70,6 +71,11 @@ export default function Dashboard() {
       ? Math.min(100, Math.round(((wamgr - currentTier.wamgr) / (nextTier.wamgr - currentTier.wamgr)) * 100))
       : 100;
 
+  // Storytelling layer: the book narrative and the top recommended actions,
+  // each headed by the business shift (not the partner name).
+  const story = bookStory(accounts, orgAlerts);
+  const recActions = recommendedActions(accounts, orgAlerts, 5);
+
   return (
     <div className="animate-fade-in">
       <Header
@@ -107,45 +113,47 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Priority Actions — first thing visible after the health banner */}
+        {/* The story — one paragraph a leader can read out loud */}
+        <p className="text-sm text-muted-foreground leading-relaxed px-1">{story}</p>
+
+        {/* Recommended Actions — headed by the business shift, then the partner */}
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center gap-1.5">
                 <Flame className="w-3.5 h-3.5 text-v-amber" />
-                This Week's Priority Actions
+                Top 5 Recommended Actions
               </CardTitle>
-              <Badge variant="warning">{selectedAM.weeklyActions.filter(a => a.priority === "high").length} urgent</Badge>
+              <Badge variant="warning">{recActions.filter(a => a.urgency === "high").length} urgent</Badge>
             </div>
           </CardHeader>
           <CardContent className="space-y-2">
-            {selectedAM.weeklyActions.map(action => (
+            {recActions.map(action => (
               <div
-                key={action.id}
-                onClick={() => {
-                  const acct = accounts.find(a => a.name === action.account);
-                  navigate(acct ? `/outreach?account=${acct.id}` : "/outreach");
-                }}
+                key={`${action.account.id}-${action.theme}`}
+                onClick={() => navigate(`/partner/${action.account.id}`)}
                 className="flex items-start gap-3 p-3 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors group cursor-pointer"
               >
                 <div className="mt-0.5">
-                  {action.priority === "high"
+                  {action.urgency === "high"
                     ? <AlertTriangle className="w-3.5 h-3.5 text-v-red" />
-                    : action.priority === "medium"
+                    : action.urgency === "medium"
                     ? <Clock className="w-3.5 h-3.5 text-v-amber" />
                     : <CheckCircle2 className="w-3.5 h-3.5 text-v-teal" />
                   }
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-xs font-semibold text-foreground">{action.account}</span>
-                    <Badge variant={priorityColor[action.priority as keyof typeof priorityColor]} className="text-[10px]">
-                      {priorityLabel[action.priority as keyof typeof priorityLabel]}
+                    <span className="text-xs font-bold text-foreground">{action.theme}</span>
+                    <span className="text-xs text-muted-foreground">·</span>
+                    <span className="text-xs font-semibold text-foreground">{action.account.name}</span>
+                    <Badge variant={priorityColor[action.urgency]} className="text-[10px]">
+                      {priorityLabel[action.urgency]}
                     </Badge>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{action.action}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{action.detail}</p>
                 </div>
-                <span className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0">{action.due}</span>
+                <ArrowRight className="w-3.5 h-3.5 text-muted-foreground shrink-0 mt-1 opacity-0 group-hover:opacity-100 transition-opacity" />
               </div>
             ))}
           </CardContent>

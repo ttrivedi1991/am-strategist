@@ -114,6 +114,47 @@ export async function fetchLastEmailDates(
   return results;
 }
 
+// Recent conversations with a partner (for the profile page's "last 3
+// conversations" panel). Subject + latest-message date + snippet per thread.
+export interface RecentThread {
+  id: string;
+  date: string;    // ISO date of the newest message in the thread
+  subject: string;
+  snippet: string;
+}
+
+export async function fetchRecentThreads(
+  token: string,
+  account: { id: string; contactEmail: string; website?: string },
+  n = 3
+): Promise<RecentThread[]> {
+  const query = buildGmailQuery(account);
+  if (!query) return [];
+
+  const list: (ThreadListResponse & { threads?: { id: string; snippet: string }[] }) | null =
+    await gmailFetch(token, `${BASE}/threads?q=${encodeURIComponent(query)}&maxResults=${n}`);
+  const threads = list?.threads ?? [];
+
+  const results = await Promise.all(
+    threads.map(async (t) => {
+      const detail: (Thread & { messages?: { internalDate: string; payload?: { headers?: { name: string; value: string }[] } }[] }) | null =
+        await gmailFetch(token, `${BASE}/threads/${t.id}?format=METADATA&metadataHeaders=Subject`);
+      const msgs = detail?.messages ?? [];
+      const last = msgs[msgs.length - 1];
+      const subject =
+        msgs[0]?.payload?.headers?.find((h) => h.name.toLowerCase() === "subject")?.value ?? "(no subject)";
+      const ms = parseInt(last?.internalDate ?? "0", 10);
+      return {
+        id: t.id,
+        date: ms > 0 ? new Date(ms).toISOString().slice(0, 10) : "",
+        subject,
+        snippet: t.snippet ?? "",
+      };
+    })
+  );
+  return results.filter((r) => r.date).sort((a, b) => (a.date < b.date ? 1 : -1));
+}
+
 // Persist/restore the Gmail token across page reloads. Token is short-lived
 // (~1 hr) so we store the expiry alongside it.
 const TOKEN_KEY = "gmail_token";

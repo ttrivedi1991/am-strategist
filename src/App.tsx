@@ -8,6 +8,7 @@ import OrgIntelligence from "@/pages/OrgIntelligence";
 import StrategizeWithMe from "@/pages/StrategizeWithMe";
 import OutreachPlanner from "@/pages/OutreachPlanner";
 import MIARecovery from "@/pages/MIARecovery";
+import PartnerProfile from "@/pages/PartnerProfile";
 import WeeklyBrief from "@/pages/WeeklyBrief";
 import Commission from "@/pages/Commission";
 import Login from "@/pages/Login";
@@ -51,6 +52,7 @@ export default function App() {
         >
           <Route index element={<Dashboard />} />
           <Route path="accounts" element={<Accounts />} />
+          <Route path="partner/:id" element={<PartnerProfile />} />
           <Route path="ai-adoption" element={<AIAdoption />} />
           <Route path="intel" element={<OrgIntelligence />} />
           <Route path="strategize" element={<StrategizeWithMe />} />
