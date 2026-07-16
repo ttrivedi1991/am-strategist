@@ -26,3 +26,6 @@ dist-ssr
 # Firebase
 .firebase/
 firebase-debug.log
+
+# Nested independent repo (Citizen Dev Lab workspace) — never commit here
+Citizen_Developer_Projects/
