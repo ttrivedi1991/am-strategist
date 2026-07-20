@@ -84,6 +84,17 @@ const PAGES: PageDoc[] = [
       "Commission is based on QoQ growth, so the levers are growing existing partners and preventing shrinkage.",
     ],
   },
+  {
+    icon: Sparkles,
+    label: "Strategize with me",
+    to: "/strategize",
+    what: "An AI assistant that answers questions about your book — priorities, QBR targets, upsell angles — grounded in your live account data.",
+    how: [
+      "Ask plain-English questions like “Which 3 accounts should I prioritize for a QBR this month?”",
+      "Open it from a partner to get a recommendation focused on that account.",
+      "Copy any answer straight into your notes or an email.",
+    ],
+  },
 ];
 
 type Concept = { icon: React.ComponentType<{ className?: string }>; term: string; def: string };

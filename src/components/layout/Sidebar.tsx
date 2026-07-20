@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useAM } from "@/context/AMContext";
 import {
-  LayoutDashboard, Users, Send, ShieldAlert, FileText, Zap, ChevronUp, Check, LogOut, TrendingUp, HelpCircle
+  LayoutDashboard, Users, Send, ShieldAlert, FileText, Zap, ChevronUp, Check, LogOut, TrendingUp, HelpCircle, Sparkles
 } from "lucide-react";
 
 // Simplified per Bryan's Jul 16 feedback: partner-centric by default.
@@ -15,6 +15,7 @@ const NAV = [
   { to: "/mia", icon: ShieldAlert, label: "Top Blockers" },
   { to: "/outreach", icon: Send, label: "Outreach Planner" },
   { to: "/brief", icon: FileText, label: "Weekly Brief" },
+  { to: "/strategize", icon: Sparkles, label: "Strategize" },
   { to: "/commission", icon: TrendingUp, label: "Commission", amOnly: true },
   { to: "/guide", icon: HelpCircle, label: "Guide" },
 ];
