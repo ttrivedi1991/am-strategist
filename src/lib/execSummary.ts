@@ -97,7 +97,7 @@ Rules:
 - Return ONLY valid JSON: {"headline":"…","performance":"…","risks":"…","outlook":"…"}`;
 
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
     {
       method: "POST",
       signal,
@@ -172,7 +172,7 @@ Rules:
 - Return ONLY valid JSON: {"headline":"…","body":"…"}`;
 
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
     {
       method: "POST",
       signal,

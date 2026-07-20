@@ -104,7 +104,7 @@ Rules:
   const userMessage = `Weekly Brief:\n${brief}\n\nBook of Business:\n${JSON.stringify(summaries)}\n\nReturn JSON matching this schema (max 3 product signals, max 7 actions; action and rationale each 1-2 sentences):\n${schemaHint}`;
 
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
     {
       method: "POST",
       signal,
