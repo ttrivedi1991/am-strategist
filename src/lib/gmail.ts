@@ -114,6 +114,22 @@ export async function fetchLastEmailDates(
   return results;
 }
 
+// Lightweight snippet pull for issue mining: one threads.list call per
+// account (no per-thread detail fetches), limited to the last 90 days.
+export async function fetchIssueSnippets(
+  token: string,
+  account: { id: string; contactEmail: string; website?: string },
+  n = 6
+): Promise<string[]> {
+  const query = buildGmailQuery(account);
+  if (!query) return [];
+  const list: ThreadListResponse | null = await gmailFetch(
+    token,
+    `${BASE}/threads?q=${encodeURIComponent(`(${query}) newer_than:90d`)}&maxResults=${n}`
+  );
+  return (list?.threads ?? []).map(t => t.snippet).filter(Boolean);
+}
+
 // Recent conversations with a partner (for the profile page's "last 3
 // conversations" panel). Subject + latest-message date + snippet per thread.
 export interface RecentThread {

@@ -116,6 +116,81 @@ Rules:
   return parsed as ExecSummary;
 }
 
+// ─── Per-partner executive summary (Partner Profile) ───────────────────────────
+
+import { quarterDelta, productMovers, trendNarrative } from "@/lib/insights";
+
+export interface PartnerSummary {
+  headline: string; // one sentence: where this partnership stands
+  body: string;     // 2-4 sentences: what they do, what they run, what moved and why, what's next
+}
+
+export function buildPartnerFacts(account: Account, orgAlerts: OrgAlert[]) {
+  const q = quarterDelta(account);
+  const movers = productMovers(account).slice(0, 4);
+  const topLines = [...account.productBreakdown]
+    .filter(p => p.mrr > 0).sort((a, b) => b.mrr - a.mrr).slice(0, 4)
+    .map(p => `${p.name.trim()} ${exact$(p.mrr)}/mo`);
+  return {
+    partner: account.name,
+    vertical: account.vertical,
+    business: account.gtmContext ?? null,
+    currentBillings: `${exact$(getLatestMRR(account.revenueHistory))}/mo (${formatMonthLabel(QTR.to)})`,
+    quarterMove: q ? `${QTR.label}: ${q.delta < 0 ? "−" : "+"}${exact$(Math.abs(q.delta))}/mo (${exact$(q.from)} → ${exact$(q.to)})` : null,
+    productMoves: movers.map(m => `${m.name} ${m.delta < 0 ? "−" : "+"}${exact$(Math.abs(m.delta))}/mo`),
+    topProducts: topLines,
+    aiProducts: account.products.length > 0 ? account.products : "none live",
+    signals: orgAlerts
+      .filter(a => a.accountId === account.id)
+      .slice(0, 3)
+      .map(a => `${a.title} (${a.date})`),
+  };
+}
+
+export function composePartnerFallback(account: Account, orgAlerts: OrgAlert[]): PartnerSummary {
+  const q = quarterDelta(account);
+  return {
+    headline: q && Math.abs(q.delta) >= 250
+      ? `${account.name} ${q.delta < 0 ? "gave back" : "added"} ${exact$(Math.abs(q.delta))}/mo in ${QTR.label}, billing ${exact$(q.to)}/mo at the ${formatMonthLabel(QTR.to)} close.`
+      : `${account.name} is billing ${exact$(getLatestMRR(account.revenueHistory))}/mo, steady through ${QTR.label}.`,
+    body: `${account.gtmContext ? `${account.gtmContext} ` : ""}${trendNarrative(account, orgAlerts)}`,
+  };
+}
+
+export async function generatePartnerSummary(
+  facts: ReturnType<typeof buildPartnerFacts>,
+  apiKey: string,
+  signal?: AbortSignal
+): Promise<PartnerSummary> {
+  const systemPrompt = `You write the executive summary at the top of a partner profile in a Vendasta account manager's dashboard. The reader may be the AM or a VP — one summary serves both.
+
+Rules:
+- Use ONLY the facts provided. Copy figures verbatim; never compute, round, or invent numbers or causes.
+- Plain, confident business prose. Active voice. No exclamation points, no hype words, no bullet fragments.
+- headline: ONE sentence — where this partnership stands and which way it's moving.
+- body: 2-4 sentences — what the partner's business is, what they run with Vendasta, what moved recently at the product level, and any live signal worth acting on. If nothing explains a move, say it's being chased, don't speculate.
+- Return ONLY valid JSON: {"headline":"…","body":"…"}`;
+
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      signal,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: systemPrompt }] },
+        contents: [{ role: "user", parts: [{ text: `Fact sheet:\n${JSON.stringify(facts, null, 2)}` }] }],
+        generationConfig: { responseMimeType: "application/json", maxOutputTokens: 768 },
+      }),
+    }
+  );
+  if (!res.ok) throw new Error(`Gemini ${res.status}`);
+  const data = await res.json();
+  const parsed = JSON.parse(data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}");
+  if (!parsed.headline || !parsed.body) throw new Error("Malformed summary");
+  return parsed as PartnerSummary;
+}
+
 // Cache per data-refresh so every visit doesn't re-generate. Keyed by AM +
 // data-through date; a new BigQuery refresh naturally invalidates it.
 export function summaryCacheKey(amId: string, dataThrough: string) {

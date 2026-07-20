@@ -293,7 +293,7 @@ function intelFirstEmail(first: string, _account: Account, topAlert: OrgAlert, c
     funding: `Congrats on ${topAlert.title}`,
     award: `Saw the recognition — ${topAlert.title}`,
   };
-  return `Hi ${first},\n\n${typeVerb[topAlert.type]}. ${topAlert.summary}\n\n${cta}\n\nTanmay`;
+  return `Hello ${first},\n\n${typeVerb[topAlert.type]}. ${topAlert.summary}\n\n${cta}\n\nTanmay`;
 }
 
 function buildSequence(account: Account, ctx: AccountCommissionContext, topAlert: OrgAlert | null, situation: Situation): OutreachStep[] {
@@ -315,26 +315,26 @@ function buildSequence(account: Account, ctx: AccountCommissionContext, topAlert
         day: 1,
         channel: "email",
         action: "Re-engagement",
-        subject: topAlert ? `${account.name} — saw the news` : `${account.name} — picking the thread back up`,
+        subject: topAlert ? `${account.name} — saw the news` : `${account.name} + Vendasta — where we stand`,
         body: topAlert
-          ? intelFirstEmail(first, account, topAlert, `That's what prompted me to reach out — I want to make sure we're supporting ${account.name} through this. You're running ${usage ?? "the Vendasta platform"} with us today, and there are pieces of this quarter's AI roadmap that bear directly on it. Are you free for 20 minutes next week?`)
-          : `Hi ${first},\n\n${biz}We haven't spoken properly in a while, and I'd rather fix that than keep planning around guesses. Today you're running ${usage ?? "the Vendasta platform"} with us${move ? `, and ${move.text} over the last 60 days` : ""}. Before I recommend anything, I want to hear where ${account.name} is headed for the rest of the year.\n\nAre you free for 20 minutes next week?\n\nTanmay`,
+          ? intelFirstEmail(first, account, topAlert, `That's what prompted this note — I want to make sure we're supporting ${account.name} through it. You run ${usage ?? "the Vendasta platform"} with us today, and parts of this quarter's roadmap bear directly on it. Do you have 20 minutes next week?`)
+          : `Hello ${first},\n\n${biz}It's been a while since we last spoke properly, and I owe you an update on where the platform is going.\n\nToday ${account.name} runs ${usage ?? "the Vendasta platform"} with us${move ? `, and ${move.text} over the last 60 days` : ""}. Before I plan anything for the second half, I want your read on where ${account.name} is headed.\n\nDo you have 20 minutes next week? Send a time and I'll build around it.\n\nTanmay`,
       },
       {
         day: 5,
         channel: "email",
         action: "Roadmap Substance",
         subject: `What's landing on the roadmap this quarter`,
-        body: `Hi ${first},\n\nFollowing up with the substance, so the ask isn't abstract. ${ROADMAP_REF} set the direction; the near-term piece is that ${ROADMAP_Q3}. For ${vc.smbs}, the practical read: ${vc.aiAngle}.\n\n${hasAI
-          ? `You already run ${aiList}, so this builds on what's deployed — nothing new for your team to learn.`
-          : `${account.name} hasn't turned on any of the AI products yet, so we'd be starting clean — no migration, no rework.`}\n\nIf a call is easier than email, 15 minutes covers it.\n\nTanmay`,
+        body: `Hello ${first},\n\nFollowing up with specifics. ${ROADMAP_REF} set the direction; the near-term piece is that ${ROADMAP_Q3}. For ${vc.smbs}: ${vc.aiAngle}.\n\n${hasAI
+          ? `You already run ${aiList} — these releases extend what your team has deployed, they don't replace it.`
+          : `${account.name} has no AI products live today, so there's nothing to migrate. We'd be starting clean.`}\n\nIf a call is easier than email, 15 minutes covers it.\n\nTanmay`,
       },
       {
         day: 11,
         channel: "email",
         action: "Direct Ask",
-        subject: `Re: ${account.name} — picking the thread back up`,
-        body: `Hi ${first},\n\nI know the calendar is the real constraint. Send me any 20-minute window in the next two weeks and I'll work around it.\n\nThe reason I'm persisting: ${account.name} is one of the accounts I'm building my second-half plan around, and I don't want to make those calls without your read.\n\nTanmay`,
+        subject: `Re: ${account.name} + Vendasta — where we stand`,
+        body: `Hello ${first},\n\nI know the calendar is the constraint, so: send me any 20-minute window in the next two weeks and I'll make it work.\n\n${account.name} is one of the accounts I'm building my second-half plan around. I'd rather build it with your input than without.\n\nTanmay`,
       },
       {
         day: 16,
@@ -347,8 +347,8 @@ function buildSequence(account: Account, ctx: AccountCommissionContext, topAlert
         day: 23,
         channel: "email",
         action: "Graceful Offramp",
-        subject: `Re: ${account.name} — picking the thread back up`,
-        body: `Hi ${first},\n\nI've sent a few notes over the past few weeks — I'll take the hint for now.\n\nIf the timing or priorities have shifted on your side, I'm easy to reach. I'll check back later in the quarter.\n\nTanmay`,
+        subject: `Re: ${account.name} + Vendasta — where we stand`,
+        body: `Hello ${first},\n\nI'll stop filling your inbox for now. If priorities have shifted on your side, that's useful for me to know too — a one-line reply covers it.\n\nI'll check back later in the quarter.\n\nTanmay`,
       },
     ];
   }
@@ -361,15 +361,15 @@ function buildSequence(account: Account, ctx: AccountCommissionContext, topAlert
         action: "Strategic Review Request",
         subject: topAlert ? `${account.name} — want to compare notes` : `${account.name} — the last 60 days`,
         body: topAlert
-          ? intelFirstEmail(first, account, topAlert, `I want to make sure we're building the right plan for ${account.name} with that context in mind${move?.direction === "down" ? ` — especially since ${move.text} on our side` : ""}. A 20-minute call would cover it. Are you free this week or next?`)
-          : `Hi ${first},\n\n${biz}I'm writing because of the numbers: ${move?.text ?? "billings have stepped down over the last 60 days"}. That may be deliberate on your side — a product decision, a budget cycle — or it may be something we should fix together. I'd rather ask than assume.\n\nYou're running ${usage ?? "the Vendasta platform"} with us, so there's real surface area to work with either way. Do you have 20 minutes this week?\n\nTanmay`,
+          ? intelFirstEmail(first, account, topAlert, `I want to make sure we build the right plan for ${account.name} with that context in mind${move?.direction === "down" ? ` — especially since ${move.text} on our side` : ""}. A 20-minute call covers it. Are you free this week or next?`)
+          : `Hello ${first},\n\n${biz}I'm writing about the numbers: ${move?.text ?? "billings have stepped down over the last 60 days"}. That may be a deliberate change on your side — a product decision, a budget cycle — or something we should fix together. I'd rather ask than assume.\n\nYou run ${usage ?? "the Vendasta platform"} with us, so there's room to work either way. Do you have 20 minutes this week?\n\nTanmay`,
       },
       {
         day: 4,
         channel: "email",
         action: "Adoption Levers",
         subject: `Re: ${account.name} — the last 60 days`,
-        body: `Hi ${first},\n\nAdding substance to my last note. ${ROADMAP_REF} set the direction, and the near-term piece is that ${ROADMAP_Q3}. For ${vc.smbs}, the read is: ${vc.aiAngle}.\n\nIf the recent step-down reflects soft adoption rather than a deliberate change, these are the levers I'd look at first — they lift usage of what you already pay for rather than adding cost.\n\nTanmay`,
+        body: `Hello ${first},\n\nAdding substance to my last note. ${ROADMAP_REF} set the direction; the near-term piece is that ${ROADMAP_Q3}. For ${vc.smbs}: ${vc.aiAngle}.\n\nIf the step-down reflects soft adoption rather than a decision, these lift usage of what you already pay for. That's the first lever I'd pull.\n\nTanmay`,
       },
       {
         day: 8,
@@ -382,7 +382,7 @@ function buildSequence(account: Account, ctx: AccountCommissionContext, topAlert
         channel: "email",
         action: "Decision Point",
         subject: `Re: ${account.name} — the last 60 days`,
-        body: `Hi ${first},\n\nWhere things stand: ${move?.text ?? "billings are down over the last 60 days"}. I want a clear plan against that — recovering the volume, adjusting the product mix, or rightsizing the commitment if that's the honest answer.\n\nA 20-minute call this week settles it. What works for you?\n\nTanmay`,
+        body: `Hello ${first},\n\nWhere things stand: ${move?.text ?? "billings are down over the last 60 days"}. I want a clear plan against that — recover the volume, adjust the product mix, or rightsize the commitment if that's the honest answer.\n\nA 20-minute call this week settles it. What works for you?\n\nTanmay`,
         note: "This is the first touch where you name the billing numbers directly. By now you've earned the right to be direct.",
       },
       {
@@ -402,15 +402,15 @@ function buildSequence(account: Account, ctx: AccountCommissionContext, topAlert
         action: "QBR Invite",
         subject: topAlert ? `${account.name} — building on the momentum` : `${account.name} — quarterly review and what's next`,
         body: topAlert
-          ? intelFirstEmail(first, account, topAlert, `With that as backdrop: ${move?.direction === "up" ? `${move.text}, and` : ""} I want to make sure we're building on ${account.name}'s trajectory, not just maintaining it. Worth a dedicated 30 minutes? I'll come with specifics on where the second-half opportunity is.`)
-          : `Hi ${first},\n\n${biz}The numbers back up what you've built: ${move?.direction === "up" ? move.text : `you're running ${usage ?? "a substantial deployment"} with us and it's holding strong`}. That trajectory is exactly when I want dedicated time — not to maintain it, but to decide what to build on top of it.\n\nWorth 30 minutes for a proper quarterly review? I'll come with specifics, including how this quarter's launches (${ROADMAP_Q3.replace(" both launch this quarter", "")}) fit your ${vc.smbs}.\n\nTanmay`,
+          ? intelFirstEmail(first, account, topAlert, `With that as backdrop: ${move?.direction === "up" ? `${move.text}, and` : ""} I want to make sure we build on ${account.name}'s trajectory rather than just maintain it. Worth a dedicated 30 minutes? I'll bring specifics on the second-half opportunity.`)
+          : `Hello ${first},\n\n${biz}The numbers speak for themselves: ${move?.direction === "up" ? move.text : `${account.name} runs ${usage ?? "a substantial deployment"} with us and it's holding strong`}. That's exactly when I want dedicated time — to decide what we build on top of it, not to admire it.\n\nWorth 30 minutes for a proper quarterly review? I'll bring specifics, including where this quarter's launches (${ROADMAP_Q3.replace(" both launch this quarter", "")}) fit your ${vc.smbs}.\n\nTanmay`,
       },
       {
         day: 5,
         channel: "email",
         action: "Expansion Angle",
         subject: `Ahead of our call — the expansion I'd look at`,
-        body: `Hi ${first},\n\nAhead of our call, the one idea I most want your read on: ${vc.aiAngle}.\n\nYou're running ${usage ?? "a solid stack"} today — the expansion I have in mind builds directly on that footprint rather than opening a new front. I'll put together a short brief before we connect.\n\nTanmay`,
+        body: `Hello ${first},\n\nAhead of our call, the one idea I want your read on: ${vc.aiAngle}.\n\nYou run ${usage ?? "a solid stack"} today. The expansion I have in mind builds on that footprint rather than opening a new front. I'll send a short brief before we connect.\n\nTanmay`,
       },
       {
         day: 10,
@@ -424,7 +424,7 @@ function buildSequence(account: Account, ctx: AccountCommissionContext, topAlert
         channel: "email",
         action: "Proposal Follow-up",
         subject: `Following up — ${account.name} next steps`,
-        body: `Hi ${first},\n\nGood conversation. I'll have the specifics we discussed — the expansion modeling and the timeline — in your inbox by end of week.\n\nTanmay`,
+        body: `Hello ${first},\n\nGood conversation. The expansion modeling and the timeline we discussed will be in your inbox by end of week.\n\nTanmay`,
         note: "Fill in the specifics from the QBR before sending.",
       },
       {
@@ -444,17 +444,17 @@ function buildSequence(account: Account, ctx: AccountCommissionContext, topAlert
       action: "Strategic Outreach",
       subject: topAlert ? `${account.name} — saw the news, want to connect` : `${account.name} — second-half planning`,
       body: topAlert
-        ? intelFirstEmail(first, account, topAlert, `That's part of what I wanted to connect on. You're running ${usage ?? "the Vendasta platform"} with us today, and I want to pressure-test whether that's still the right stack for where ${account.name} is going. Are you free for 20 minutes this week or next?`)
-        : `Hi ${first},\n\n${biz}You're running ${usage ?? "the Vendasta platform"} with us${move ? `, and ${move.text}` : ", and billings have held steady"}. Heading into the second half I want to pressure-test whether that's still the right stack for where ${account.name} is going — ${ROADMAP_REF} set the direction, and ${ROADMAP_Q3}.\n\nAre you free for 20 minutes this week or next?\n\nTanmay`,
+        ? intelFirstEmail(first, account, topAlert, `That's part of what I wanted to connect on. You run ${usage ?? "the Vendasta platform"} with us today, and I want to check that it's still the right stack for where ${account.name} is going. Do you have 20 minutes this week or next?`)
+        : `Hello ${first},\n\n${biz}You run ${usage ?? "the Vendasta platform"} with us${move ? `, and ${move.text}` : ", and billings have held steady"}. Heading into the second half, I want to check that this is still the right stack for where ${account.name} is going — ${ROADMAP_REF} set the direction, and ${ROADMAP_Q3}.\n\nDo you have 20 minutes this week or next?\n\nTanmay`,
     },
     {
       day: 5,
       channel: "email",
       action: "Product Fit Detail",
       subject: `Re: ${account.name} — second-half planning`,
-      body: `Hi ${first},\n\nThe specific thing I'd walk through: ${vc.aiAngle}.\n\n${hasAI
-          ? `You already run ${aiList} — this quarter's additions build on that footprint, and I can share adoption numbers from other ${account.vertical} partners so you can judge the fit yourself.`
-          : `${account.name} hasn't turned on the AI products yet. Starting clean is genuinely easier — no migration, and your ${vc.smbs} see the impact from day one.`}\n\nDo you have 20 minutes this week or next?\n\nTanmay`,
+      body: `Hello ${first},\n\nThe specific item I'd walk through: ${vc.aiAngle}.\n\n${hasAI
+          ? `You already run ${aiList}. This quarter's additions extend that footprint, and I can share adoption numbers from other ${account.vertical} partners so you can judge the fit yourself.`
+          : `${account.name} has no AI products live yet. Starting clean is easier — no migration, and your ${vc.smbs} see the impact from day one.`}\n\nDo you have 20 minutes this week or next?\n\nTanmay`,
     },
     {
       day: 9,
@@ -467,14 +467,14 @@ function buildSequence(account: Account, ctx: AccountCommissionContext, topAlert
       channel: "email",
       action: "Follow-up",
       subject: `Following up — ${account.name}`,
-      body: `Hi ${first},\n\nFollowing up on my last note. The agenda is specific to ${account.name}: your current stack, the movement in your billings, and two roadmap items that affect how your ${vc.smbs} get found. Not a standard pitch.\n\nIf this week doesn't work, what does?\n\nTanmay`,
+      body: `Hello ${first},\n\nFollowing up. The agenda is specific to ${account.name}: your current stack, the movement in your billings, and two roadmap items that affect how your ${vc.smbs} get found.\n\nIf this week doesn't work, tell me what does.\n\nTanmay`,
     },
     {
       day: 22,
       channel: "email",
       action: "Close the Loop",
       subject: `Re: ${account.name} + 2026 AI roadmap`,
-      body: `Hi ${first},\n\nLast note on this for now. If the timing is wrong this quarter, say so and I'll come back with the same agenda when it isn't.\n\nIf there's a quicker question I can answer by email in the meantime, I'm happy to do that too.\n\nTanmay`,
+      body: `Hello ${first},\n\nLast note on this for now. If the timing is wrong this quarter, say so and I'll come back with the same agenda when it isn't.\n\nIf there's a quicker question I can answer by email in the meantime, send it over.\n\nTanmay`,
     },
   ];
 }

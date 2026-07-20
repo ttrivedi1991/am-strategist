@@ -65,6 +65,21 @@ export default function Commission() {
   const [compareQ, setCompareQ] = useState(QUARTER.label);
   const quarterOutlooks = QUARTERS.map(q => ({ q, o: computeQuarterOutlook(accounts, selectedAM.id, q) }));
   const selectedCompare = quarterOutlooks.find(x => x.q.label === compareQ) ?? quarterOutlooks[quarterOutlooks.length - 1];
+
+  // Billings growth per quarter (raw billings, not commissionable): last
+  // closed month in the quarter vs the baseline close. The in-progress
+  // quarter falls back to current MTD, labeled as such.
+  const billingsAt = (week: string) =>
+    accounts.reduce((s, a) => s + (a.revenueHistory.find(h => h.week === week)?.mrr ?? 0), 0);
+  const mtdBillingsTotal = accounts.reduce((s, a) => s + (a.mtdBilling?.mrr ?? 0), 0);
+  const billingsGrowth = (q: (typeof QUARTERS)[number]): { delta: number; note: string } | null => {
+    const from = billingsAt(q.baselineWeek);
+    if (from <= 0) return null;
+    const closed = [...q.months].reverse().find(w => billingsAt(w) > 0);
+    if (closed) return { delta: billingsAt(closed) - from, note: "" };
+    if (q.label === QUARTER.label && mtdBillingsTotal > 0) return { delta: mtdBillingsTotal - from, note: " (MTD)" };
+    return null;
+  };
   const {
     months, adjustedBook, bookUnderManagement, netQuarterlyGrowth, wamgr,
     tier: currentTier, nextTier, bookUSD, bookCAD, bookGrowthCommissionCAD,
@@ -267,8 +282,8 @@ export default function Commission() {
                     <th className="py-2 pr-3 font-semibold">Quarter</th>
                     <th className="py-2 px-3 font-semibold text-right">Baseline (M1 start)</th>
                     <th className="py-2 px-3 font-semibold text-right">Quarter Close</th>
-                    <th className="py-2 px-3 font-semibold text-right">Net Growth</th>
-                    <th className="py-2 px-3 font-semibold text-right">WAMGR</th>
+                    <th className="py-2 px-3 font-semibold text-right">Billings Growth</th>
+                    <th className="py-2 px-3 font-semibold text-right">Commissionable Growth</th>
                     <th className="py-2 px-3 font-semibold">Tier</th>
                     <th className="py-2 px-3 font-semibold text-right">Payout (CAD)</th>
                     <th className="py-2 pl-3 font-semibold">Basis</th>
@@ -283,11 +298,14 @@ export default function Commission() {
                         <td className="py-2 pr-3 font-semibold text-foreground">{q.label}</td>
                         <td className="py-2 px-3 text-right tnum">{formatCurrency(o.months[0]?.start ?? 0)}</td>
                         <td className="py-2 px-3 text-right tnum font-semibold">{formatCurrency(o.months[o.months.length - 1]?.end ?? 0)}</td>
+                        <td className={`py-2 px-3 text-right tnum font-semibold ${(billingsGrowth(q)?.delta ?? 0) < 0 ? "text-v-red" : "text-v-green"}`}>
+                          {(() => {
+                            const bg = billingsGrowth(q);
+                            return bg ? `${bg.delta >= 0 ? "+" : "−"}${formatCurrency(Math.abs(bg.delta))}${bg.note}` : "—";
+                          })()}
+                        </td>
                         <td className={`py-2 px-3 text-right tnum font-semibold ${o.netQuarterlyGrowth < 0 ? "text-v-red" : "text-v-green"}`}>
                           {o.netQuarterlyGrowth >= 0 ? "+" : "−"}{formatCurrency(Math.abs(o.netQuarterlyGrowth))}
-                        </td>
-                        <td className={`py-2 px-3 text-right tnum font-bold ${o.wamgr < 0 ? "text-v-red" : "text-v-green"}`}>
-                          {(o.wamgr * 100).toFixed(2)}%
                         </td>
                         <td className="py-2 px-3">{o.tier.label === "negative" ? "below 0%" : o.tier.label}</td>
                         <td className="py-2 px-3 text-right tnum font-semibold">{formatCurrency(o.projectedCommissionCAD)}</td>
@@ -324,7 +342,7 @@ export default function Commission() {
               </table>
             </div>
             <p className="text-[10px] text-muted-foreground">
-              Same WAMGR model for every quarter: net growth = Σ (month end − start), WAMGR = net growth ÷ Σ month starts. Finance-published finals override warehouse math where they exist (Q2 2026). Q1 2026 is warehouse-derived — finance's Q1 statement isn't loaded.
+              Billings growth = raw billings, last closed month in the quarter vs the baseline close (in-progress quarter shows MTD). Commissionable growth = Σ (month end − start) in comp-plan dollars — the growth finance pays on; WAMGR stays in the scoring section below, where the commission math lives. Finance-published finals override warehouse math where they exist (Q2 2026); Q1 2026 is warehouse-derived.
             </p>
           </CardContent>
         </Card>

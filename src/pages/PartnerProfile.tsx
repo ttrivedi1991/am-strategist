@@ -10,7 +10,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAM } from "@/context/AMContext";
 import { formatCurrency, formatDate, getLatestMRR, recentDeltaMRR, commissionableMRR, formatMonthLabel } from "@/lib/utils";
-import { quarterDelta, sixMonthHistory, trendNarrative, recommendedActions, productMovers, exact$, QTR } from "@/lib/insights";
+import { quarterDelta, sixMonthHistory, recommendedActions, productMovers, exact$, QTR } from "@/lib/insights";
+import {
+  buildPartnerFacts, composePartnerFallback, generatePartnerSummary,
+  loadCachedSummary, cacheSummary, type PartnerSummary,
+} from "@/lib/execSummary";
 import { loadGmailToken, fetchRecentThreads, type RecentThread } from "@/lib/gmail";
 import {
   AreaChart, Area, ResponsiveContainer, Tooltip, XAxis, YAxis,
@@ -38,11 +42,31 @@ const AI_TIER_LABEL: Record<Account["aiAdoption"], string> = {
 export default function PartnerProfile() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { accounts, orgAlerts } = useAM();
+  const am = useAM();
+  const { accounts, orgAlerts } = am;
   const account = accounts.find(a => a.id === id);
 
   const [threads, setThreads] = useState<RecentThread[] | null>(null);
   const [threadsState, setThreadsState] = useState<"loading" | "no-token" | "done" | "error">("loading");
+  const [summary, setSummary] = useState<PartnerSummary | null>(null);
+  const [showAllProducts, setShowAllProducts] = useState(false);
+
+  // Executive summary — same pattern as the Dashboard: Gemini prose from an
+  // exact fact sheet, cached per data refresh, deterministic fallback.
+  useEffect(() => {
+    if (!account) return;
+    const key = `partnerSummary:${account.id}:${am.liveMeta?.dataThrough ?? "static"}`;
+    const cached = loadCachedSummary(key) as PartnerSummary | null;
+    if (cached?.body) { setSummary(cached); return; }
+    setSummary(composePartnerFallback(account, orgAlerts));
+    if (am.geminiApiKey) {
+      const ctrl = new AbortController();
+      generatePartnerSummary(buildPartnerFacts(account, orgAlerts), am.geminiApiKey, ctrl.signal)
+        .then(s => { cacheSummary(key, s as any); setSummary(s); })
+        .catch(() => { /* fallback already showing */ });
+      return () => ctrl.abort();
+    }
+  }, [account?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!account) return;
@@ -67,7 +91,6 @@ export default function PartnerProfile() {
   const recent = recentDeltaMRR(account.revenueHistory);
   const commissionable = commissionableMRR(account.productBreakdown);
   const health = healthBadge[account.health];
-  const story = trendNarrative(account, orgAlerts);
   const trend = sixMonthHistory(account).map(h => ({ ...h, label: formatMonthLabel(h.week) }));
   const signals = orgAlerts
     .filter(a => a.accountId === account.id)
@@ -148,16 +171,20 @@ export default function PartnerProfile() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Left: story + trend + products */}
           <div className="lg:col-span-2 space-y-4">
-            {/* The story */}
+            {/* Executive summary — Gemini prose from exact facts, like the Dashboard */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-1.5">
-                  <MessageSquare className="w-3.5 h-3.5 text-v-blue" /> The Story
+                  <MessageSquare className="w-3.5 h-3.5 text-v-blue" /> Executive Summary
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
-                {account.gtmContext && <p className="text-sm text-foreground leading-relaxed">{account.gtmContext}</p>}
-                <p className="text-sm text-muted-foreground leading-relaxed">{story}</p>
+                {summary && (
+                  <>
+                    <p className="text-sm font-semibold text-foreground leading-snug">{summary.headline}</p>
+                    <p className="text-sm text-foreground leading-relaxed">{summary.body}</p>
+                  </>
+                )}
                 {account.notes && <p className="text-xs text-muted-foreground leading-relaxed border-t border-border pt-2">Notes: {account.notes}</p>}
               </CardContent>
             </Card>
@@ -223,7 +250,7 @@ export default function PartnerProfile() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-1.5">
-                  <Package className="w-3.5 h-3.5 text-muted-foreground" /> What They Buy ({productLines.length} lines)
+                  <Package className="w-3.5 h-3.5 text-muted-foreground" /> What They Buy
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-0">
@@ -237,7 +264,7 @@ export default function PartnerProfile() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
-                      {productLines.map(p => (
+                      {(showAllProducts ? productLines : productLines.slice(0, 6)).map(p => (
                         <tr key={p.name}>
                           <td className="px-4 py-2">
                             <span className="font-medium text-foreground">{p.name.trim()}</span>
@@ -250,6 +277,14 @@ export default function PartnerProfile() {
                     </tbody>
                   </table>
                 </div>
+                {productLines.length > 6 && (
+                  <button
+                    onClick={() => setShowAllProducts(v => !v)}
+                    className="w-full px-4 py-2 text-xs text-v-blue hover:bg-secondary/40 transition-colors border-t border-border"
+                  >
+                    {showAllProducts ? "Show top 6" : `Show all ${productLines.length} products`}
+                  </button>
+                )}
               </CardContent>
             </Card>
           </div>

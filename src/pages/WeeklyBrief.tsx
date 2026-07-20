@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Header } from "@/components/layout/Header";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAM } from "@/context/AMContext";
@@ -143,8 +143,10 @@ export default function WeeklyBrief() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showBrief, setShowBrief] = useState(false);
+  const [editBrief, setEditBrief] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const userEdited = useRef(false);
+  const autoRan = useRef(false);
 
   // Load the current brief from Firestore. A manual paste always wins.
   useEffect(() => {
@@ -159,6 +161,15 @@ export default function WeeklyBrief() {
       .catch(() => { /* not fatal — paste still works */ })
       .finally(() => setBriefLoading(false));
   }, []);
+
+  // Run the analysis automatically once the stored brief lands — the page
+  // should open with the mapped plan, not an empty state and a button.
+  useEffect(() => {
+    if (!autoRan.current && storedBrief && geminiApiKey && !analysis && !loading) {
+      autoRan.current = true;
+      analyze();
+    }
+  }, [storedBrief, geminiApiKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function analyze() {
     if (!geminiApiKey) return;
@@ -200,72 +211,81 @@ export default function WeeklyBrief() {
 
       <div className="p-6 space-y-5">
 
-        {/* Input */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <div>
-                <CardTitle className="flex items-center gap-1.5">
-                  <ClipboardPaste className="w-3.5 h-3.5 text-v-blue" />
-                  {storedBrief ? storedBrief.title : "Weekly R&D / Marketing Brief"}
-                </CardTitle>
+        {/* Source strip — the brief is an input, not the show */}
+        <div className="flex items-center justify-between gap-3 flex-wrap px-4 py-3 rounded-xl border border-border bg-card">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-lg bg-v-blue/10 flex items-center justify-center shrink-0">
+              <ClipboardPaste className="w-4 h-4 text-v-blue" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-foreground truncate">
+                {storedBrief ? storedBrief.title : briefLoading ? "Loading the stored brief…" : "No brief loaded"}
+              </p>
+              <p className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
                 {storedBrief ? (
-                  <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1.5 flex-wrap">
-                    <span>{storedBrief.author ? `${storedBrief.author} · ` : ""}pulled from Confluence {formatDate(storedBrief.fetchedAt)}</span>
+                  <>
+                    <span>{storedBrief.author ? `${storedBrief.author} · ` : ""}Confluence · {formatDate(storedBrief.fetchedAt)}</span>
                     <a href={storedBrief.sourceUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-v-blue hover:underline">
-                      <ExternalLink className="w-2.5 h-2.5" /> open source page
+                      <ExternalLink className="w-2.5 h-2.5" /> source
                     </a>
-                    <span>· paste below to override</span>
-                  </p>
+                  </>
                 ) : (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {briefLoading ? "Loading the stored brief…" : "No stored brief found — copy the latest Product Brief from Confluence and paste here."}
-                  </p>
+                  !briefLoading && <span>Paste the latest Product Brief below to analyze it.</span>
                 )}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => setShowBrief(!showBrief)}
+              className="flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-lg text-muted-foreground hover:bg-secondary transition-colors"
+            >
+              {showBrief ? <><ChevronUp className="w-3 h-3" /> Hide brief</> : <><ChevronDown className="w-3 h-3" /> View brief</>}
+            </button>
+            <Button size="sm" onClick={analyze} disabled={loading || !brief.trim() || !geminiApiKey}>
+              {loading
+                ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Analyzing…</>
+                : <><Sparkles className="w-3.5 h-3.5" /> {analysis ? "Re-run" : "Map to My Book"}</>}
+            </Button>
+          </div>
+        </div>
+
+        {!geminiApiKey && (
+          <div className="flex items-center gap-1.5 text-xs text-amber-600 px-1">
+            <AlertCircle className="w-3.5 h-3.5" />
+            Gemini key not configured — run <code className="bg-secondary px-1 rounded">GEMINI_API_KEY=... npx tsx scripts/seed-firestore.ts</code>
+          </div>
+        )}
+
+        {/* Brief content — readable prose by default, edit on demand */}
+        {showBrief && (
+          <Card>
+            <CardContent className="p-0">
+              <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-secondary/40">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Brief content</p>
+                <button
+                  onClick={() => setEditBrief(v => !v)}
+                  className="text-xs text-v-blue hover:underline"
+                >
+                  {editBrief ? "Done editing" : "Edit / paste override"}
+                </button>
               </div>
-              <button
-                onClick={() => setShowBrief(!showBrief)}
-                className="flex items-center gap-1.5 text-xs text-primary hover:underline"
-              >
-                {showBrief
-                  ? <><ChevronUp className="w-3 h-3" /> Hide</>
-                  : <><ChevronDown className="w-3 h-3" /> Show brief</>}
-              </button>
-            </div>
-          </CardHeader>
-          {showBrief && (
-            <CardContent className="pt-0 space-y-3">
-              <textarea
-                value={brief}
-                onChange={e => { userEdited.current = true; setBrief(e.target.value); }}
-                rows={14}
-                placeholder="Paste your weekly brief here..."
-                className="w-full px-3 py-2.5 text-xs font-mono rounded-lg border border-border bg-secondary/30 focus:outline-none focus:ring-2 focus:ring-ring resize-none leading-relaxed"
-              />
+              {editBrief ? (
+                <textarea
+                  value={brief}
+                  onChange={e => { userEdited.current = true; setBrief(e.target.value); }}
+                  rows={16}
+                  placeholder="Paste your weekly brief here…"
+                  className="w-full px-4 py-3 text-xs font-mono bg-background focus:outline-none resize-y leading-relaxed"
+                />
+              ) : (
+                <div className="max-h-96 overflow-y-auto px-5 py-4">
+                  <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">{brief || "Nothing loaded yet."}</p>
+                </div>
+              )}
             </CardContent>
-          )}
-          <CardContent className={showBrief ? "pt-0" : ""}>
-            <div className="flex items-center gap-3 flex-wrap">
-              <Button
-                onClick={analyze}
-                disabled={loading || !brief.trim() || !geminiApiKey}
-              >
-                {loading
-                  ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Analyzing...</>
-                  : <><Sparkles className="w-3.5 h-3.5" /> Generate Action Plan</>}
-              </Button>
-              {!geminiApiKey && (
-                <span className="flex items-center gap-1.5 text-xs text-amber-600">
-                  <AlertCircle className="w-3.5 h-3.5" />
-                  Gemini key not configured — run <code className="bg-secondary px-1 rounded">GEMINI_API_KEY=... npx tsx scripts/seed-firestore.ts</code>
-                </span>
-              )}
-              {geminiApiKey && !showBrief && brief.trim() && storedBrief && (
-                <span className="text-xs text-muted-foreground">"{storedBrief.title}" loaded — click Generate, or Show brief to review/override</span>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+          </Card>
+        )}
 
         {/* Loading */}
         {loading && (
