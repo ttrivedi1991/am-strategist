@@ -188,22 +188,18 @@ export default function Guide() {
           </div>
         </div>
 
-        {/* Partner Profile + AI assistant callout */}
+        {/* Partner Profile callout */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <UserSquare2 className="w-4 h-4 text-v-purple" /> Partner Profile &amp; Strategize With Me
+              <UserSquare2 className="w-4 h-4 text-v-purple" /> Partner Profile
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2">
+          <CardContent>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              Clicking any partner opens their <strong className="text-foreground">Partner Profile</strong> — the
-              partner-centric view that now holds their AI adoption and org-intelligence signals in one place.
-            </p>
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              <strong className="text-foreground">Strategize With Me</strong> is the built-in AI assistant. Ask it
-              things like &ldquo;Which 3 accounts should I prioritize for a QBR this month?&rdquo; and it answers
-              grounded in your live book data.
+              Clicking any partner — from the Dashboard or Accounts — opens their{" "}
+              <strong className="text-foreground">Partner Profile</strong>: the partner-centric view that now
+              holds their MRR history, AI-adoption, and org-intelligence signals in one place.
             </p>
           </CardContent>
         </Card>
