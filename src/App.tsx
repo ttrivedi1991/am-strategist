@@ -11,6 +11,7 @@ import MIARecovery from "@/pages/MIARecovery";
 import PartnerProfile from "@/pages/PartnerProfile";
 import WeeklyBrief from "@/pages/WeeklyBrief";
 import Commission from "@/pages/Commission";
+import Guide from "@/pages/Guide";
 import Login from "@/pages/Login";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -60,6 +61,7 @@ export default function App() {
           <Route path="mia" element={<MIARecovery />} />
           <Route path="brief" element={<WeeklyBrief />} />
           <Route path="commission" element={<AMOnlyRoute><Commission /></AMOnlyRoute>} />
+          <Route path="guide" element={<Guide />} />
         </Route>
       </Routes>
     </BrowserRouter>
