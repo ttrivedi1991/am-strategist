@@ -20,18 +20,22 @@ import {
   mineEmailIssues, loadCachedIssues, cacheIssues, clearCachedIssues,
   type EmailIssue,
 } from "@/lib/emailIssues";
-import type { Account, OrgAlert } from "@/data/types";
+import type { Account } from "@/data/types";
 import {
   TrendingDown, ShieldAlert,
-  Mail, BrainCircuit, Zap, ArrowRight,
+  Mail, BrainCircuit, ArrowRight,
   Wifi, WifiOff, RefreshCw, Package, Layers, Headphones,
   ChevronDown, ChevronRight as ChevronRightIcon,
 } from "lucide-react";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
+// Blockers are strictly partner issues (billing declines, corroborated risk,
+// email-flagged problems) or product/platform adoption. Org changes are NOT
+// blockers — they're strategy context, surfaced in outreach talk tracks and
+// partner profiles instead.
 type BlockerCategory =
-  | "billing" | "ai-adoption" | "at-risk" | "org-change"
+  | "billing" | "ai-adoption" | "at-risk"
   | "product" | "platform" | "service";
 
 interface Blocker {
@@ -43,7 +47,6 @@ interface Blocker {
   mrrAtRisk: number;
   urgency: "high" | "medium" | "low";
   action: string;
-  alertId?: string;
 }
 
 // ─── Category metadata ─────────────────────────────────────────────────────────
@@ -62,14 +65,12 @@ const CATEGORY_META: Record<BlockerCategory, {
   service:       { label: "Customer Service", icon: Headphones,   color: "text-v-purple", bg: "bg-v-purple/10", border: "border-v-purple/30", leftBorder: "border-l-v-purple" },
   "ai-adoption": { label: "AI Adoption",      icon: BrainCircuit, color: "text-v-blue",   bg: "bg-v-blue/10",   border: "border-v-blue/30",   leftBorder: "border-l-v-blue" },
   "at-risk":     { label: "At Risk",          icon: ShieldAlert,  color: "text-v-red",    bg: "bg-v-red/10",    border: "border-v-red/30",    leftBorder: "border-l-v-red" },
-  "org-change":  { label: "Org Change",       icon: Zap,          color: "text-v-purple", bg: "bg-v-purple/10", border: "border-v-purple/30", leftBorder: "border-l-v-purple" },
 };
 
 // ─── Blocker derivation ────────────────────────────────────────────────────────
 
 function buildBlockers(
   accounts: Account[],
-  orgAlerts: OrgAlert[],
   emailIssues: EmailIssue[]
 ): Blocker[] {
   const blockers: Blocker[] = [];
@@ -124,24 +125,6 @@ function buildBlockers(
       });
     }
 
-    // High-urgency org alerts (top one per account only)
-    const topAlert = orgAlerts
-      .filter(a => a.accountId === account.id && (a.urgency === "high" || a.urgency === "medium"))
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
-
-    if (topAlert) {
-      blockers.push({
-        id: `${account.id}-org-${topAlert.id}`,
-        category: "org-change",
-        account,
-        headline: topAlert.title,
-        detail: `${topAlert.summary}${topAlert.actionSuggestion ? ` — ${topAlert.actionSuggestion}` : ""}`,
-        mrrAtRisk: 0,
-        urgency: topAlert.urgency as "high" | "medium",
-        action: "Respond to change",
-        alertId: topAlert.id,
-      });
-    }
   }
 
   // Email-mined issues → product / platform / service / billing themes
@@ -187,8 +170,6 @@ function themeNarrative(cat: BlockerCategory, items: Blocker[]): string | null {
       return `${items.length} partner${items.length > 1 ? "s" : ""} bill real dollars with zero AI products — the cleanest expansion lane, led by ${names}.`;
     case "at-risk":
       return `${items.length} flagged partner${items.length > 1 ? "s" : ""} also show${items.length === 1 ? "s" : ""} live revenue decline — the flag is corroborated, not historical.`;
-    case "org-change":
-      return `${items.length} partner${items.length > 1 ? "s have" : " has"} verified organizational changes in play — each one is a timing window for outreach.`;
   }
 }
 
@@ -196,7 +177,7 @@ function themeNarrative(cat: BlockerCategory, items: Blocker[]): string | null {
 
 export default function TopBlockers() {
   const navigate = useNavigate();
-  const { accounts, orgAlerts, geminiApiKey } = useAM();
+  const { accounts, geminiApiKey } = useAM();
   const [activeFilter, setActiveFilter] = useState<BlockerCategory | "all">("all");
   const [expanded, setExpanded] = useState<string | null>(null);
 
@@ -255,7 +236,7 @@ export default function TopBlockers() {
     }
   }
 
-  const blockers = buildBlockers(accounts, orgAlerts, issues);
+  const blockers = buildBlockers(accounts, issues);
   const filtered = activeFilter === "all" ? blockers : blockers.filter(b => b.category === activeFilter);
 
   const categoryCounts = (Object.keys(CATEGORY_META) as BlockerCategory[]).reduce((acc, cat) => {
@@ -436,11 +417,7 @@ export default function TopBlockers() {
                     <div className="flex gap-2 mt-3 flex-wrap">
                       <Button
                         size="sm"
-                        onClick={() => {
-                          const params = new URLSearchParams({ account: blocker.account.id });
-                          if (blocker.alertId) params.set("intel", blocker.alertId);
-                          navigate(`/outreach?${params.toString()}`);
-                        }}
+                        onClick={() => navigate(`/outreach?account=${blocker.account.id}`)}
                       >
                         {blocker.action} <ArrowRight className="w-3.5 h-3.5" />
                       </Button>

@@ -228,7 +228,7 @@ const SITUATION_META: Record<Situation, { label: string; variant: "danger" | "wa
 
 // ─── Call prep ─────────────────────────────────────────────────────────────────
 
-function buildCallPrep(account: Account, _ctx: AccountCommissionContext, situation: Situation): CallPrep {
+function buildCallPrep(account: Account, _ctx: AccountCommissionContext, situation: Situation, topAlert: OrgAlert | null = null): CallPrep {
   const vc = getVertCtx(account.vertical);
   const hasAI = account.products.length > 0;
 
@@ -272,10 +272,16 @@ function buildCallPrep(account: Account, _ctx: AccountCommissionContext, situati
     ? `${account.products.slice(0, 2).join(" and ")} is already live. ${situation === "declining" ? "Before adding SKUs, the question is whether we're getting full value out of what's deployed." : "The next layer builds directly on that — I want to show you what that looks like."}`
     : `${account.name} doesn't have AI products active yet. That's actually a clean starting point — no migration, no rework. ${vc.aiAngle}.`;
 
+  // Org changes are strategy context, not blockers — they lead the talk track.
+  const angles = [productAngle, vc.aiAngle];
+  if (topAlert) {
+    angles.unshift(`Strategy talk track — ${topAlert.title}: ${topAlert.actionSuggestion}`);
+  }
+
   return {
     opening: openings[situation],
     questions: questionSets[situation],
-    angles: [productAngle, vc.aiAngle],
+    angles,
     close: situation === "declining" || situation === "atRisk"
       ? `"Let me put together a short summary of what we discussed and a clear path forward — I'll have it to you by end of week. Does that work?"`
       : `"I'll send a summary after this with two concrete next steps. Should have it to you within a day."`,
@@ -299,7 +305,7 @@ function intelFirstEmail(first: string, _account: Account, topAlert: OrgAlert, c
 function buildSequence(account: Account, ctx: AccountCommissionContext, topAlert: OrgAlert | null, situation: Situation): OutreachStep[] {
   const first = account.contactName.split(" ")[0] || account.contactName;
   const vc = getVertCtx(account.vertical);
-  const callPrep = buildCallPrep(account, ctx, situation);
+  const callPrep = buildCallPrep(account, ctx, situation, topAlert);
   const aiList = account.products.slice(0, 2).join(" and ");
   const hasAI = account.products.length > 0;
   // The six threads of the outreach strategy, resolved per account:
