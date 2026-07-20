@@ -61,29 +61,29 @@ async function latestThreadDate(token: string, query: string): Promise<number | 
   return dateMs > 0 ? dateMs : null;
 }
 
-// Build the Gmail search query for an account. Prefers the individual contact
-// address; falls back to a domain-wide search (excluding obvious bulk mail)
-// when no real contact email exists, so accounts like ApartmentRatings still
-// get engagement signal.
+// Build the Gmail search query for an account. Searches the whole partner
+// ORG (contact address + company domain), not just the contact-of-record —
+// issues are usually raised by other people at the partner (e.g. a Telkom
+// engineer, not the exec contact). Bulk-mail noise is excluded.
 export function buildGmailQuery(a: { id: string; contactEmail: string; website?: string }): string | null {
   const hasRealEmail =
     a.contactEmail && !a.contactEmail.startsWith("contact@") && a.contactEmail.includes("@");
+  const contactDomain = hasRealEmail ? a.contactEmail.split("@")[1] : null;
+  const domain = (DOMAIN_OVERRIDES[a.id] ?? a.website ?? contactDomain ?? "").replace(/^www\./, "");
 
-  if (hasRealEmail) {
-    const contactDomain = a.contactEmail.split("@")[1];
-    const override = DOMAIN_OVERRIDES[a.id];
-    // Contact writes from one entity but the org uses another (e.g. Platr.ai
-    // contact on restaurant.com, company on takeout7.com) — search both.
-    if (override && override !== contactDomain) {
-      return `from:(${a.contactEmail} OR @${override}) OR to:(${a.contactEmail} OR @${override})`;
-    }
-    return `from:${a.contactEmail} OR to:${a.contactEmail}`;
-  }
+  const parties = new Set<string>();
+  if (hasRealEmail) parties.add(a.contactEmail);
+  if (domain.includes(".")) parties.add(`@${domain}`);
+  if (contactDomain && contactDomain !== domain) parties.add(`@${contactDomain}`);
+  if (parties.size === 0) return null;
 
-  const domain = (DOMAIN_OVERRIDES[a.id] ?? a.website ?? "").replace(/^www\./, "");
-  if (!domain.includes(".")) return null;
-  return `(from:@${domain} OR to:@${domain}) -from:noreply -from:no-reply -category:promotions`;
+  const list = [...parties].join(" OR ");
+  return `(from:(${list}) OR to:(${list})) -from:noreply -from:no-reply -category:promotions`;
 }
+
+// Calendar traffic drowns real conversations for active partners — exclude
+// it when mining for issues.
+const INVITE_NOISE = `-subject:"Invitation:" -subject:"Updated invitation:" -subject:"Accepted:" -subject:"Declined:" -subject:"Canceled event:" -filename:invite.ics`;
 
 // Returns a map of accountId → last email date (ISO string). Runs fetches
 // concurrently in batches of 5 to stay under Gmail API rate limits.
@@ -114,20 +114,41 @@ export async function fetchLastEmailDates(
   return results;
 }
 
-// Lightweight snippet pull for issue mining: one threads.list call per
-// account (no per-thread detail fetches), limited to the last 90 days.
-export async function fetchIssueSnippets(
+// Conversation pull for issue mining: recent non-invite threads with their
+// SUBJECT and per-message snippets, so the classifier sees the actual
+// back-and-forth (a bare thread snippet is ~100 chars of the last message
+// and misses issues raised earlier in the conversation).
+export interface IssueThread {
+  subject: string;
+  snippets: string[]; // per-message snippets, oldest → newest (last 5)
+}
+
+export async function fetchIssueThreads(
   token: string,
   account: { id: string; contactEmail: string; website?: string },
-  n = 6
-): Promise<string[]> {
+  n = 10
+): Promise<IssueThread[]> {
   const query = buildGmailQuery(account);
   if (!query) return [];
   const list: ThreadListResponse | null = await gmailFetch(
     token,
-    `${BASE}/threads?q=${encodeURIComponent(`(${query}) newer_than:90d`)}&maxResults=${n}`
+    `${BASE}/threads?q=${encodeURIComponent(`(${query}) ${INVITE_NOISE} newer_than:90d`)}&maxResults=${n}`
   );
-  return (list?.threads ?? []).map(t => t.snippet).filter(Boolean);
+  const threads = list?.threads ?? [];
+  const detailed = await Promise.all(
+    threads.map(async t => {
+      const detail: any = await gmailFetch(
+        token,
+        `${BASE}/threads/${t.id}?format=METADATA&metadataHeaders=Subject`
+      );
+      const msgs: any[] = detail?.messages ?? [];
+      const subject =
+        msgs[0]?.payload?.headers?.find((h: any) => h.name.toLowerCase() === "subject")?.value ?? "(no subject)";
+      const snippets = msgs.slice(-5).map(m => m.snippet).filter(Boolean);
+      return snippets.length > 0 ? { subject, snippets } : null;
+    })
+  );
+  return detailed.filter((t): t is IssueThread => t !== null);
 }
 
 // Recent conversations with a partner (for the profile page's "last 3

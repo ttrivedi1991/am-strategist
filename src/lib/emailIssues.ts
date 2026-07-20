@@ -4,7 +4,7 @@
 // issues actually present in the emails are kept — the prompt forbids
 // inventing problems.
 import type { Account } from "@/data/types";
-import { fetchIssueSnippets, GmailAuthError } from "@/lib/gmail";
+import { fetchIssueThreads, GmailAuthError, type IssueThread } from "@/lib/gmail";
 import { ensureGeminiModel } from "@/lib/gemini";
 
 export type IssueTheme = "product" | "platform" | "service" | "billing";
@@ -17,7 +17,9 @@ export interface EmailIssue {
   detail: string;  // what the email said, paraphrased with specifics
 }
 
-const CACHE_KEY = "emailIssues:v1";
+// v2: domain-wide search + subjects + per-message snippets (v1 read only
+// contact-of-record thread snippets and missed most flagged issues).
+const CACHE_KEY = "emailIssues:v2";
 const CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 export function loadCachedIssues(): EmailIssue[] | null {
@@ -47,24 +49,25 @@ export async function mineEmailIssues(
   signal?: AbortSignal,
   onProgress?: (done: number, total: number) => void
 ): Promise<EmailIssue[]> {
-  // 1. Snippets per account, batched to respect Gmail rate limits.
-  const entries: { accountId: string; accountName: string; snippets: string[] }[] = [];
-  const BATCH = 5;
+  // 1. Recent conversations per account (subject + per-message snippets,
+  // org-wide, invites excluded), batched to respect Gmail rate limits.
+  const entries: { accountId: string; accountName: string; threads: IssueThread[] }[] = [];
+  const BATCH = 4;
   for (let i = 0; i < accounts.length; i += BATCH) {
     if (signal?.aborted) throw new DOMException("aborted", "AbortError");
     const slice = accounts.slice(i, i + BATCH);
     const results = await Promise.all(
       slice.map(async a => {
         try {
-          const snippets = await fetchIssueSnippets(token, a, 6);
-          return { accountId: a.id, accountName: a.name, snippets };
+          const threads = await fetchIssueThreads(token, a, 10);
+          return { accountId: a.id, accountName: a.name, threads };
         } catch (e) {
           if (e instanceof GmailAuthError) throw e;
-          return { accountId: a.id, accountName: a.name, snippets: [] };
+          return { accountId: a.id, accountName: a.name, threads: [] };
         }
       })
     );
-    entries.push(...results.filter(r => r.snippets.length > 0));
+    entries.push(...results.filter(r => r.threads.length > 0));
     onProgress?.(Math.min(i + BATCH, accounts.length), accounts.length);
   }
   if (entries.length === 0) return [];
@@ -79,7 +82,9 @@ Classify each issue as exactly one theme:
 - "billing": invoices, charges, credits, pricing disputes
 
 Rules:
-- ONLY extract issues actually present in the snippets. Scheduling emails, pleasantries, marketing, and calendar invites are NOT issues. If there are no real issues, return an empty list.
+- ONLY extract issues actually present in the emails. Scheduling, pleasantries, and marketing are NOT issues. If there are no real issues, return an empty list.
+- Access requests, how-to questions, and unresolved asks ("can you assist with…", "still can't see…") ARE issues — classify by what they're about.
+- One entry per distinct issue per partner; if a thread shows the issue was clearly resolved, skip it.
 - title: one short sentence naming the issue. detail: 1-2 sentences with the specifics from the email.
 - Return ONLY valid JSON: {"issues":[{"accountId":"…","theme":"product|platform|service|billing","title":"…","detail":"…"}]}`;
 
@@ -92,8 +97,8 @@ Rules:
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         system_instruction: { parts: [{ text: systemPrompt }] },
-        contents: [{ role: "user", parts: [{ text: `Email snippets by partner:\n${JSON.stringify(entries, null, 1)}` }] }],
-        generationConfig: { responseMimeType: "application/json", maxOutputTokens: 4096 },
+        contents: [{ role: "user", parts: [{ text: `Email conversations by partner (each thread: subject + message snippets, oldest→newest):\n${JSON.stringify(entries, null, 1)}` }] }],
+        generationConfig: { responseMimeType: "application/json", maxOutputTokens: 8192 },
       }),
     }
   );
