@@ -32,7 +32,8 @@ const AMS = [
   { id: "adam", email: "astark@vendasta.com" },
 ];
 const EMAILS_SQL = AMS.map(a => `'${a.email}'`).join(", ");
-const SERIES_START = "2025-11-01";
+// Oct 2025 start so Q4 2025 quarter totals are complete on the Commission page.
+const SERIES_START = "2025-10-01";
 
 const sdkBq = join(homedir(), "Downloads/google-cloud-sdk/bin/bq");
 const BQ = existsSync(sdkBq) ? sdkBq : "bq";

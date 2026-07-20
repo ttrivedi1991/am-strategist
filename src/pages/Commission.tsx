@@ -66,20 +66,45 @@ export default function Commission() {
   const quarterOutlooks = QUARTERS.map(q => ({ q, o: computeQuarterOutlook(accounts, selectedAM.id, q) }));
   const selectedCompare = quarterOutlooks.find(x => x.q.label === compareQ) ?? quarterOutlooks[quarterOutlooks.length - 1];
 
-  // Billings growth per quarter (raw billings, not commissionable): last
-  // closed month in the quarter vs the baseline close. The in-progress
-  // quarter falls back to current MTD, labeled as such.
+  // Quarter TOTALS (Σ of the three months) — the top compare is quarter total
+  // vs prior quarter total, per Tanmay: Q4 2025 vs Q1 2026 vs Q2 2026, with
+  // the in-progress quarter accumulating and clearly labeled.
   const billingsAt = (week: string) =>
     accounts.reduce((s, a) => s + (a.revenueHistory.find(h => h.week === week)?.mrr ?? 0), 0);
   const mtdBillingsTotal = accounts.reduce((s, a) => s + (a.mtdBilling?.mrr ?? 0), 0);
-  const billingsGrowth = (q: (typeof QUARTERS)[number]): { delta: number; note: string } | null => {
-    const from = billingsAt(q.baselineWeek);
-    if (from <= 0) return null;
-    const closed = [...q.months].reverse().find(w => billingsAt(w) > 0);
-    if (closed) return { delta: billingsAt(closed) - from, note: "" };
-    if (q.label === QUARTER.label && mtdBillingsTotal > 0) return { delta: mtdBillingsTotal - from, note: " (MTD)" };
-    return null;
-  };
+
+  const TOTAL_QUARTERS = [
+    { label: "Q4 2025", months: ["Oct 25", "Nov 25", "Dec 25"] },
+    { label: "Q1 2026", months: ["Jan 26", "Feb 26", "Mar 26"] },
+    { label: "Q2 2026", months: ["Apr 26", "May 26", "Jun 26"] },
+    { label: "Q3 2026", months: ["Jul 26", "Aug 26", "Sep 26"] },
+  ];
+
+  const quarterTotals = TOTAL_QUARTERS.map(q => {
+    const closedMonths = q.months.filter(w => billingsAt(w) > 0);
+    const complete = closedMonths.length === q.months.length;
+    let billings = closedMonths.reduce((s, w) => s + billingsAt(w), 0);
+    let comm = closedMonths.reduce((s, w) => s + monthlyCommissionable(accounts, w), 0);
+    let note = "";
+    if (closedMonths.length === 0 && q.label === QUARTER.label && mtdBillingsTotal > 0) {
+      billings = mtdBillingsTotal;
+      comm = mtdCommissionable(accounts);
+      note = `${formatMonthLabel(mtdLabel)} MTD`;
+    } else if (!complete && closedMonths.length > 0) {
+      note = `${closedMonths.length} of 3 months`;
+    }
+    return { ...q, billings, comm, complete, note };
+  }).filter(q => q.billings > 0);
+
+  const withGrowth = quarterTotals.map((q, i) => {
+    const prev = quarterTotals[i - 1];
+    const comparable = prev?.complete && q.complete;
+    return {
+      ...q,
+      billingsDelta: comparable ? q.billings - prev.billings : null,
+      commDelta: comparable ? q.comm - prev.comm : null,
+    };
+  });
   const {
     months, adjustedBook, bookUnderManagement, netQuarterlyGrowth, wamgr,
     tier: currentTier, nextTier, bookUSD, bookCAD, bookGrowthCommissionCAD,
@@ -274,47 +299,40 @@ export default function Commission() {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* All quarters side by side */}
+            {/* Quarter totals side by side — total vs prior-quarter total */}
             <div className="overflow-x-auto">
               <table className="w-full text-xs min-w-[640px]">
                 <thead>
                   <tr className="text-left text-[10px] text-muted-foreground uppercase tracking-wide border-b border-border">
                     <th className="py-2 pr-3 font-semibold">Quarter</th>
-                    <th className="py-2 px-3 font-semibold text-right">Baseline (M1 start)</th>
-                    <th className="py-2 px-3 font-semibold text-right">Quarter Close</th>
-                    <th className="py-2 px-3 font-semibold text-right">Billings Growth</th>
-                    <th className="py-2 px-3 font-semibold text-right">Commissionable Growth</th>
-                    <th className="py-2 px-3 font-semibold">Tier</th>
-                    <th className="py-2 px-3 font-semibold text-right">Payout (CAD)</th>
-                    <th className="py-2 pl-3 font-semibold">Basis</th>
+                    <th className="py-2 px-3 font-semibold text-right">Total Billings</th>
+                    <th className="py-2 px-3 font-semibold text-right">Billings Growth (QoQ)</th>
+                    <th className="py-2 px-3 font-semibold text-right">Total Commissionable</th>
+                    <th className="py-2 px-3 font-semibold text-right">Commissionable Growth (QoQ)</th>
+                    <th className="py-2 pl-3 font-semibold">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {quarterOutlooks.map(({ q, o }) => {
-                    const isCurrent = q.label === QUARTER.label;
-                    const isFinanceFinal = o.months.every(m => m.status === "final") && o.baselineIsFinal;
-                    return (
-                      <tr key={q.label} className={compareQ === q.label ? "bg-secondary/40" : ""}>
-                        <td className="py-2 pr-3 font-semibold text-foreground">{q.label}</td>
-                        <td className="py-2 px-3 text-right tnum">{formatCurrency(o.months[0]?.start ?? 0)}</td>
-                        <td className="py-2 px-3 text-right tnum font-semibold">{formatCurrency(o.months[o.months.length - 1]?.end ?? 0)}</td>
-                        <td className={`py-2 px-3 text-right tnum font-semibold ${(billingsGrowth(q)?.delta ?? 0) < 0 ? "text-v-red" : "text-v-green"}`}>
-                          {(() => {
-                            const bg = billingsGrowth(q);
-                            return bg ? `${bg.delta >= 0 ? "+" : "−"}${formatCurrency(Math.abs(bg.delta))}${bg.note}` : "—";
-                          })()}
-                        </td>
-                        <td className={`py-2 px-3 text-right tnum font-semibold ${o.netQuarterlyGrowth < 0 ? "text-v-red" : "text-v-green"}`}>
-                          {o.netQuarterlyGrowth >= 0 ? "+" : "−"}{formatCurrency(Math.abs(o.netQuarterlyGrowth))}
-                        </td>
-                        <td className="py-2 px-3">{o.tier.label === "negative" ? "below 0%" : o.tier.label}</td>
-                        <td className="py-2 px-3 text-right tnum font-semibold">{formatCurrency(o.projectedCommissionCAD)}</td>
-                        <td className="py-2 pl-3 text-muted-foreground">
-                          {isFinanceFinal ? "finance final" : isCurrent ? "in progress · projected" : "warehouse-derived"}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {withGrowth.map(q => (
+                    <tr key={q.label}>
+                      <td className="py-2 pr-3 font-semibold text-foreground">{q.label}</td>
+                      <td className="py-2 px-3 text-right tnum font-semibold">{formatCurrency(q.billings)}</td>
+                      <td className={`py-2 px-3 text-right tnum font-semibold ${q.billingsDelta == null ? "text-muted-foreground" : q.billingsDelta < 0 ? "text-v-red" : "text-v-green"}`}>
+                        {q.billingsDelta == null
+                          ? "—"
+                          : `${q.billingsDelta >= 0 ? "+" : "−"}${formatCurrency(Math.abs(q.billingsDelta))} (${q.billingsDelta >= 0 ? "+" : ""}${((q.billingsDelta / (q.billings - q.billingsDelta)) * 100).toFixed(1)}%)`}
+                      </td>
+                      <td className="py-2 px-3 text-right tnum font-semibold text-v-teal">{formatCurrency(q.comm)}</td>
+                      <td className={`py-2 px-3 text-right tnum font-semibold ${q.commDelta == null ? "text-muted-foreground" : q.commDelta < 0 ? "text-v-red" : "text-v-green"}`}>
+                        {q.commDelta == null
+                          ? "—"
+                          : `${q.commDelta >= 0 ? "+" : "−"}${formatCurrency(Math.abs(q.commDelta))} (${q.commDelta >= 0 ? "+" : ""}${((q.commDelta / (q.comm - q.commDelta)) * 100).toFixed(1)}%)`}
+                      </td>
+                      <td className="py-2 pl-3 text-muted-foreground">
+                        {q.complete ? "complete" : q.note ? `in progress · ${q.note}` : "in progress"}
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -342,7 +360,7 @@ export default function Commission() {
               </table>
             </div>
             <p className="text-[10px] text-muted-foreground">
-              Billings growth = raw billings, last closed month in the quarter vs the baseline close (in-progress quarter shows MTD). Commissionable growth = Σ (month end − start) in comp-plan dollars — the growth finance pays on; WAMGR stays in the scoring section below, where the commission math lives. Finance-published finals override warehouse math where they exist (Q2 2026); Q1 2026 is warehouse-derived.
+              Quarter totals = the three months summed (billings raw; commissionable at comp-plan rates, finance actuals where published). Growth compares complete quarters only — the in-progress quarter accumulates and starts comparing once it closes. WAMGR and the cohort scoring stay below, where the commission math lives.
             </p>
           </CardContent>
         </Card>
