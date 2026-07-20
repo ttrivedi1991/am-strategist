@@ -8,6 +8,7 @@ import {
   bookBridge, recommendedActions, exact$, QTR,
   type RecommendedAction, type BridgeDriver,
 } from "@/lib/insights";
+import { ensureGeminiModel } from "@/lib/gemini";
 
 export interface ExecSummary {
   headline: string;      // one sentence: position + trajectory
@@ -96,8 +97,9 @@ Rules:
 - outlook: 1-2 sentences — current-month pace and the plays in motion.
 - Return ONLY valid JSON: {"headline":"…","performance":"…","risks":"…","outlook":"…"}`;
 
+  const model = await ensureGeminiModel(apiKey);
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
     {
       method: "POST",
       signal,
@@ -171,8 +173,9 @@ Rules:
 - body: 2-4 sentences — what the partner's business is, what they run with Vendasta, what moved recently at the product level, and any live signal worth acting on. If nothing explains a move, say it's being chased, don't speculate.
 - Return ONLY valid JSON: {"headline":"…","body":"…"}`;
 
+  const model = await ensureGeminiModel(apiKey);
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
     {
       method: "POST",
       signal,

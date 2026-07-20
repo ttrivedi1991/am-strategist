@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useAM } from "@/context/AMContext";
 import { formatCurrency, getLatestMRR, getQoQBaseMRR, pctChange, daysSince } from "@/lib/utils";
 import { aiProductsOf } from "@/lib/products";
+import { ensureGeminiModel } from "@/lib/gemini";
 import { type Account, type AMProfile } from "@/data/types";
 import { Send, Sparkles, RotateCcw, Copy, Check, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -146,8 +147,9 @@ async function streamChat(
     parts: [{ text: m.content }],
   }));
 
+  const model = await ensureGeminiModel(apiKey);
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?key=${apiKey}&alt=sse`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?key=${apiKey}&alt=sse`,
     {
       method: "POST",
       signal,

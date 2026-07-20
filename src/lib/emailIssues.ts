@@ -5,6 +5,7 @@
 // inventing problems.
 import type { Account } from "@/data/types";
 import { fetchIssueSnippets, GmailAuthError } from "@/lib/gmail";
+import { ensureGeminiModel } from "@/lib/gemini";
 
 export type IssueTheme = "product" | "platform" | "service" | "billing";
 
@@ -82,8 +83,9 @@ Rules:
 - title: one short sentence naming the issue. detail: 1-2 sentences with the specifics from the email.
 - Return ONLY valid JSON: {"issues":[{"accountId":"…","theme":"product|platform|service|billing","title":"…","detail":"…"}]}`;
 
+  const model = await ensureGeminiModel(apiKey);
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
     {
       method: "POST",
       signal,
