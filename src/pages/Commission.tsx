@@ -12,10 +12,12 @@ import {
 } from "@/lib/commission";
 
 import { useNavigate } from "react-router-dom";
+import type { Account } from "@/data/types";
 import {
   TrendingUp, TrendingDown, Users, ArrowRight,
   Flame, DollarSign, Target, AlertTriangle, BrainCircuit,
-  ChevronDown, ChevronUp, Package, Scale, History,
+  ChevronDown, ChevronUp, Package, Scale, History, X,
+  ChevronRight as ChevronRightIcon,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -42,6 +44,116 @@ const MONTH_STATUS_LABEL = {
   inProgress: "in progress · projected at pace",
   assumed: "assumed flat",
 } as const;
+
+// ── QoQ growth attribution modal ─────────────────────────────────────────────
+// Clicking a growth cell decomposes the quarter-total delta into per-partner
+// deltas; billings rows expand further into per-SKU deltas (product history).
+
+interface GrowthRow {
+  account: Account;
+  prev: number;
+  cur: number;
+  delta: number;
+  skus?: { name: string; category: string; prev: number; cur: number; delta: number }[];
+}
+
+function GrowthModal({
+  title, netDelta, prevLabel, curLabel, rows, mode, onClose,
+}: {
+  title: string;
+  netDelta: number;
+  prevLabel: string;
+  curLabel: string;
+  rows: GrowthRow[];
+  mode: "billings" | "comm";
+  onClose: () => void;
+}) {
+  const [openRow, setOpenRow] = useState<string | null>(null);
+  const shown = rows.slice(0, 25);
+  const shownGross = shown.reduce((s, r) => s + Math.abs(r.delta), 0);
+  const gross = rows.reduce((s, r) => s + Math.abs(r.delta), 0);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={onClose}>
+      <div
+        className="w-full max-w-3xl max-h-[85vh] flex flex-col rounded-xl border border-border bg-background shadow-xl overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 py-3 border-b border-border shrink-0">
+          <div>
+            <p className="text-sm font-bold text-foreground">{title}</p>
+            <p className="text-[11px] text-muted-foreground">
+              Net {netDelta >= 0 ? "+" : "−"}{formatCurrency(Math.abs(netDelta))} · each row: {prevLabel} total → {curLabel} total
+              {mode === "billings" ? " · click a partner for the SKU split" : " · comp-plan dollars, partner level"}
+            </p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="overflow-y-auto">
+          <table className="w-full text-xs">
+            <thead className="sticky top-0 bg-secondary/95 backdrop-blur z-10">
+              <tr className="text-left text-[10px] text-muted-foreground uppercase tracking-wide">
+                <th className="px-5 py-2 font-semibold">Partner</th>
+                <th className="px-3 py-2 font-semibold text-right">{prevLabel}</th>
+                <th className="px-3 py-2 font-semibold text-right">{curLabel}</th>
+                <th className="px-5 py-2 font-semibold text-right">Δ</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {shown.map(r => {
+                const isOpen = openRow === r.account.id;
+                const expandable = mode === "billings" && (r.skus?.length ?? 0) > 0;
+                return (
+                  <>
+                    <tr
+                      key={r.account.id}
+                      className={expandable ? "cursor-pointer hover:bg-secondary/40" : ""}
+                      onClick={() => expandable && setOpenRow(isOpen ? null : r.account.id)}
+                    >
+                      <td className="px-5 py-2 font-semibold text-foreground">
+                        <span className="inline-flex items-center gap-1">
+                          {expandable && (isOpen
+                            ? <ChevronDown className="w-3 h-3 text-muted-foreground" />
+                            : <ChevronRightIcon className="w-3 h-3 text-muted-foreground" />)}
+                          {r.account.name}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-right tnum text-muted-foreground">{formatCurrency(r.prev)}</td>
+                      <td className="px-3 py-2 text-right tnum">{formatCurrency(r.cur)}</td>
+                      <td className={`px-5 py-2 text-right tnum font-bold ${r.delta < 0 ? "text-v-red" : "text-v-green"}`}>
+                        {r.delta >= 0 ? "+" : "−"}{formatCurrency(Math.abs(r.delta))}
+                      </td>
+                    </tr>
+                    {isOpen && r.skus!.map(s => (
+                      <tr key={`${r.account.id}-${s.name}`} className="bg-secondary/25">
+                        <td className="pl-10 pr-5 py-1.5 text-muted-foreground">
+                          {s.name} <span className="text-muted-foreground/60">· {s.category}</span>
+                        </td>
+                        <td className="px-3 py-1.5 text-right tnum text-muted-foreground">{formatCurrency(s.prev)}</td>
+                        <td className="px-3 py-1.5 text-right tnum text-muted-foreground">{formatCurrency(s.cur)}</td>
+                        <td className={`px-5 py-1.5 text-right tnum font-semibold ${s.delta < 0 ? "text-v-red" : "text-v-green"}`}>
+                          {s.delta >= 0 ? "+" : "−"}{formatCurrency(Math.abs(s.delta))}
+                        </td>
+                      </tr>
+                    ))}
+                  </>
+                );
+              })}
+            </tbody>
+          </table>
+          {rows.length > shown.length && (
+            <p className="px-5 py-2 text-[10px] text-muted-foreground border-t border-border">
+              Top {shown.length} of {rows.length} partners with movement shown (~{gross > 0 ? Math.round((shownGross / gross) * 100) : 100}% of gross change). Remaining movements are under the threshold.
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ── Component ────────────────────────────────────────────────────────────────
 
@@ -101,10 +213,55 @@ export default function Commission() {
     const comparable = prev?.complete && q.complete;
     return {
       ...q,
+      prevQuarter: comparable ? prev : null,
       billingsDelta: comparable ? q.billings - prev.billings : null,
       commDelta: comparable ? q.comm - prev.comm : null,
     };
   });
+
+  // Drill-down: decompose a quarter-total delta into partner (and SKU) deltas.
+  const [growthModal, setGrowthModal] = useState<{ mode: "billings" | "comm"; qLabel: string } | null>(null);
+
+  const sumQuarterBillings = (a: Account, months: string[]) =>
+    months.reduce((s, w) => s + (a.revenueHistory.find(h => h.week === w)?.mrr ?? 0), 0);
+  const sumQuarterComm = (a: Account, months: string[]) =>
+    months.reduce((s, w) => s + accountMonthlyCommissionable(a, w), 0);
+
+  const growthRows = (mode: "billings" | "comm", cur: { months: string[] }, prev: { months: string[] }): GrowthRow[] =>
+    accounts
+      .map(a => {
+        const curV = mode === "billings" ? sumQuarterBillings(a, cur.months) : sumQuarterComm(a, cur.months);
+        const prevV = mode === "billings" ? sumQuarterBillings(a, prev.months) : sumQuarterComm(a, prev.months);
+        let skus: GrowthRow["skus"];
+        if (mode === "billings" && a.productHistory) {
+          skus = Object.entries(a.productHistory)
+            .map(([name, h]) => {
+              const c = cur.months.reduce((s, w) => s + (h.byMonth[w] ?? 0), 0);
+              const p = prev.months.reduce((s, w) => s + (h.byMonth[w] ?? 0), 0);
+              return { name, category: h.category, prev: p, cur: c, delta: c - p };
+            })
+            .filter(s => Math.abs(s.delta) >= 25)
+            .sort((x, y) => Math.abs(y.delta) - Math.abs(x.delta));
+        }
+        return { account: a, prev: prevV, cur: curV, delta: curV - prevV, skus };
+      })
+      .filter(r => Math.abs(r.delta) >= 50)
+      .sort((x, y) => Math.abs(y.delta) - Math.abs(x.delta));
+
+  const modalData = (() => {
+    if (!growthModal) return null;
+    const q = withGrowth.find(x => x.label === growthModal.qLabel);
+    if (!q?.prevQuarter) return null;
+    const delta = growthModal.mode === "billings" ? q.billingsDelta! : q.commDelta!;
+    return {
+      title: `${growthModal.mode === "billings" ? "Billings" : "Commissionable"} — ${q.prevQuarter.label} → ${q.label}`,
+      netDelta: delta,
+      prevLabel: q.prevQuarter.label,
+      curLabel: q.label,
+      rows: growthRows(growthModal.mode, q, q.prevQuarter),
+      mode: growthModal.mode,
+    };
+  })();
   const {
     months, adjustedBook, bookUnderManagement, netQuarterlyGrowth, wamgr,
     tier: currentTier, nextTier, bookUSD, bookCAD, bookGrowthCommissionCAD,
@@ -317,16 +474,32 @@ export default function Commission() {
                     <tr key={q.label}>
                       <td className="py-2 pr-3 font-semibold text-foreground">{q.label}</td>
                       <td className="py-2 px-3 text-right tnum font-semibold">{formatCurrency(q.billings)}</td>
-                      <td className={`py-2 px-3 text-right tnum font-semibold ${q.billingsDelta == null ? "text-muted-foreground" : q.billingsDelta < 0 ? "text-v-red" : "text-v-green"}`}>
-                        {q.billingsDelta == null
-                          ? "—"
-                          : `${q.billingsDelta >= 0 ? "+" : "−"}${formatCurrency(Math.abs(q.billingsDelta))} (${q.billingsDelta >= 0 ? "+" : ""}${((q.billingsDelta / (q.billings - q.billingsDelta)) * 100).toFixed(1)}%)`}
+                      <td className="py-2 px-3 text-right">
+                        {q.billingsDelta == null ? (
+                          <span className="text-muted-foreground tnum font-semibold">—</span>
+                        ) : (
+                          <button
+                            onClick={() => setGrowthModal({ mode: "billings", qLabel: q.label })}
+                            title="Click for the partner and SKU breakdown"
+                            className={`tnum font-semibold underline decoration-dotted underline-offset-2 hover:opacity-75 ${q.billingsDelta < 0 ? "text-v-red" : "text-v-green"}`}
+                          >
+                            {`${q.billingsDelta >= 0 ? "+" : "−"}${formatCurrency(Math.abs(q.billingsDelta))} (${q.billingsDelta >= 0 ? "+" : ""}${((q.billingsDelta / (q.billings - q.billingsDelta)) * 100).toFixed(1)}%)`}
+                          </button>
+                        )}
                       </td>
                       <td className="py-2 px-3 text-right tnum font-semibold text-v-teal">{formatCurrency(q.comm)}</td>
-                      <td className={`py-2 px-3 text-right tnum font-semibold ${q.commDelta == null ? "text-muted-foreground" : q.commDelta < 0 ? "text-v-red" : "text-v-green"}`}>
-                        {q.commDelta == null
-                          ? "—"
-                          : `${q.commDelta >= 0 ? "+" : "−"}${formatCurrency(Math.abs(q.commDelta))} (${q.commDelta >= 0 ? "+" : ""}${((q.commDelta / (q.comm - q.commDelta)) * 100).toFixed(1)}%)`}
+                      <td className="py-2 px-3 text-right">
+                        {q.commDelta == null ? (
+                          <span className="text-muted-foreground tnum font-semibold">—</span>
+                        ) : (
+                          <button
+                            onClick={() => setGrowthModal({ mode: "comm", qLabel: q.label })}
+                            title="Click for the partner breakdown"
+                            className={`tnum font-semibold underline decoration-dotted underline-offset-2 hover:opacity-75 ${q.commDelta < 0 ? "text-v-red" : "text-v-green"}`}
+                          >
+                            {`${q.commDelta >= 0 ? "+" : "−"}${formatCurrency(Math.abs(q.commDelta))} (${q.commDelta >= 0 ? "+" : ""}${((q.commDelta / (q.comm - q.commDelta)) * 100).toFixed(1)}%)`}
+                          </button>
+                        )}
                       </td>
                       <td className="py-2 pl-3 text-muted-foreground">
                         {q.complete ? "complete" : q.note ? `in progress · ${q.note}` : "in progress"}
@@ -919,6 +1092,8 @@ export default function Commission() {
       </div>}
 
       {tab === "sku" && <SkuBreakdown accounts={accounts} focusMonth={focusMonth} mtdLabel={mtdLabel} onOutreach={id => navigate(`/outreach?account=${id}`)} />}
+
+      {modalData && <GrowthModal {...modalData} onClose={() => setGrowthModal(null)} />}
     </div>
   );
 }
