@@ -8,7 +8,7 @@ import {
   bookBridge, recommendedActions, exact$, QTR,
   type RecommendedAction, type BridgeDriver,
 } from "@/lib/insights";
-import { ensureGeminiModel } from "@/lib/gemini";
+import { ensureGeminiModel, geminiConfig, geminiText } from "@/lib/gemini";
 
 export interface ExecSummary {
   headline: string;      // one sentence: position + trajectory
@@ -107,13 +107,12 @@ Rules:
       body: JSON.stringify({
         system_instruction: { parts: [{ text: systemPrompt }] },
         contents: [{ role: "user", parts: [{ text: `Fact sheet:\n${JSON.stringify(facts, null, 2)}` }] }],
-        generationConfig: { responseMimeType: "application/json", maxOutputTokens: 1024 },
+        generationConfig: geminiConfig(model, { responseMimeType: "application/json", maxOutputTokens: 1024 }),
       }),
     }
   );
   if (!res.ok) throw new Error(`Gemini ${res.status}`);
-  const data = await res.json();
-  const parsed = JSON.parse(data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}");
+  const parsed = JSON.parse(geminiText(await res.json()));
   if (!parsed.headline || !parsed.performance) throw new Error("Malformed summary");
   return parsed as ExecSummary;
 }
@@ -183,13 +182,12 @@ Rules:
       body: JSON.stringify({
         system_instruction: { parts: [{ text: systemPrompt }] },
         contents: [{ role: "user", parts: [{ text: `Fact sheet:\n${JSON.stringify(facts, null, 2)}` }] }],
-        generationConfig: { responseMimeType: "application/json", maxOutputTokens: 768 },
+        generationConfig: geminiConfig(model, { responseMimeType: "application/json", maxOutputTokens: 768 }),
       }),
     }
   );
   if (!res.ok) throw new Error(`Gemini ${res.status}`);
-  const data = await res.json();
-  const parsed = JSON.parse(data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}");
+  const parsed = JSON.parse(geminiText(await res.json()));
   if (!parsed.headline || !parsed.body) throw new Error("Malformed summary");
   return parsed as PartnerSummary;
 }

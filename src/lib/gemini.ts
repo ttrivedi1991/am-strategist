@@ -82,6 +82,28 @@ async function discoverModel(apiKey: string): Promise<string> {
   }
 }
 
+// Gemini 2.5 flash models "think" by default, and thought tokens count
+// against maxOutputTokens — a large classification call can burn its whole
+// budget thinking and return NO text (which reads as an empty result).
+// For structured/JSON calls, disable thinking. Only flash supports budget 0.
+export function geminiConfig<T extends object>(model: string, config: T): T {
+  return model.includes("flash") && model.includes("2.5")
+    ? { ...config, thinkingConfig: { thinkingBudget: 0 } }
+    : config;
+}
+
+// Extract the response text, throwing on an empty/thought-only response so
+// callers fail loudly instead of caching an empty result.
+export function geminiText(data: any): string {
+  const text = (data?.candidates?.[0]?.content?.parts ?? [])
+    .map((p: any) => p.text ?? "")
+    .join("");
+  if (!text.trim()) {
+    throw new Error(`Gemini returned no text (finishReason: ${data?.candidates?.[0]?.finishReason ?? "unknown"})`);
+  }
+  return text;
+}
+
 // The one entry point. Returns a model name that meets the version floor and
 // was verified available within the last 24 hours.
 export async function ensureGeminiModel(apiKey: string): Promise<string> {

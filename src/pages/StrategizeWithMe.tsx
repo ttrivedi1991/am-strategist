@@ -3,9 +3,10 @@ import { useSearchParams } from "react-router-dom";
 import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
 import { useAM } from "@/context/AMContext";
-import { formatCurrency, getLatestMRR, getQoQBaseMRR, pctChange, daysSince } from "@/lib/utils";
+import { formatCurrency, getLatestMRR, getQoQBaseMRR, pctChange, recentDeltaMRR, formatMonthLabel, QOQ_BASELINE_LABEL } from "@/lib/utils";
 import { aiProductsOf } from "@/lib/products";
-import { ensureGeminiModel } from "@/lib/gemini";
+import { QUARTER, computeQuarterOutlook } from "@/lib/commission";
+import { ensureGeminiModel, geminiConfig } from "@/lib/gemini";
 import { type Account, type AMProfile } from "@/data/types";
 import { Send, Sparkles, RotateCcw, Copy, Check, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -71,12 +72,14 @@ interface Message {
 
 // ─── System prompt ─────────────────────────────────────────────────────────────
 
-function buildSystemPrompt(accounts: Account[], _selectedAM: AMProfile): string {
+function buildSystemPrompt(accounts: Account[], selectedAM: AMProfile): string {
   const active = accounts.filter(a => getLatestMRR(a.revenueHistory) > 0);
   const totalMRR = active.reduce((s, a) => s + getLatestMRR(a.revenueHistory), 0);
   const totalBase = active.reduce((s, a) => s + getQoQBaseMRR(a.revenueHistory), 0);
   const qoqPct = pctChange(totalMRR, totalBase);
-  const miaCount = accounts.filter(a => a.isMIA || daysSince(a.lastMeeting) >= 45).length;
+  const latestLabel = formatMonthLabel(active[0]?.revenueHistory.at(-1)?.week ?? "");
+  const outlook = computeQuarterOutlook(accounts, selectedAM.id);
+  const wamgrPct = (outlook.wamgr * 100).toFixed(2);
 
   const accountLines = active
     .sort((a, b) => getLatestMRR(b.revenueHistory) - getLatestMRR(a.revenueHistory))
@@ -84,9 +87,11 @@ function buildSystemPrompt(accounts: Account[], _selectedAM: AMProfile): string 
       const mrr = getLatestMRR(a.revenueHistory);
       const base = getQoQBaseMRR(a.revenueHistory);
       const delta = mrr - base;
+      const recent = recentDeltaMRR(a.revenueHistory);
+      const move = recent ? ` | ${recent.delta >= 0 ? "+" : ""}${formatCurrency(recent.delta)} last 60d` : "";
       const aiProds = aiProductsOf(a).map(p => p.name).join(", ") || "none";
-      const days = daysSince(a.lastMeeting);
-      return `• ${a.name} (${a.vertical}) — ${formatCurrency(mrr)}/mo | ${delta >= 0 ? "+" : ""}${formatCurrency(delta)} QoQ | ${a.health} | AI: ${aiProds} | Contact: ${a.contactName} <${a.contactEmail}> | Last contact: ${days}d ago${a.isMIA || days >= 45 ? " [MIA]" : ""} | ${a.notes.slice(0, 120)}`;
+      const gtm = a.gtmContext ? ` | GTM: ${a.gtmContext.slice(0, 140)}` : "";
+      return `• ${a.name} (${a.vertical}) — ${formatCurrency(mrr)}/mo | ${delta >= 0 ? "+" : ""}${formatCurrency(delta)} QoQ${move} | AI: ${aiProds} | Contact: ${a.contactName} <${a.contactEmail}>${gtm} | ${a.notes.slice(0, 120)}`;
     })
     .join("\n");
 
@@ -94,13 +99,21 @@ function buildSystemPrompt(accounts: Account[], _selectedAM: AMProfile): string 
 
 ABOUT TANMAY:
 - Role: Senior Account Manager, ISV vertical at Vendasta
-- Book: ${active.length} active Channel partners, ${formatCurrency(totalMRR)} total MRR
-- QoQ trend: ${qoqPct >= 0 ? "+" : ""}${qoqPct}% vs March 2026 close (the commission baseline)
-- Commission basis: WAMGR — weighted average monthly growth rate across the book, Q2 2026 (Apr–Jun vs Mar close)
-- MIA accounts: ${miaCount} partners with no contact in 45+ days
+- Book: ${active.length} active Channel partners, ${formatCurrency(totalMRR)} total MRR (through the ${latestLabel} close)
+- QoQ trend: ${qoqPct >= 0 ? "+" : ""}${qoqPct}% vs the ${QOQ_BASELINE_LABEL} close (prior-quarter close = commission baseline)
 - Today: ${new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
 
-BOOK OF BUSINESS:
+COMMISSION (${QUARTER.label}, live outlook — use these numbers, do not estimate your own):
+- Basis: WAMGR = net quarterly growth ÷ Σ month-start book; payout = tier rate × book under management, in CAD
+- WAMGR to date: ${wamgrPct}% → tier "${outlook.tier.label}" paying ${(outlook.tier.rate * 100).toFixed(2)}%
+- Net quarterly growth so far: ${outlook.netQuarterlyGrowth >= 0 ? "+" : ""}${formatCurrency(outlook.netQuarterlyGrowth)}
+- Projected commission: CA$${Math.round(outlook.projectedCommissionCAD).toLocaleString()}
+${outlook.nextTier ? `- Next tier ${outlook.nextTier.label} needs ${formatCurrency(outlook.gapToNextTier)} more net growth → +CA$${Math.round(outlook.nextTierUpliftCAD).toLocaleString()} uplift` : "- Already at the top tier"}
+
+ENGAGEMENT DATA:
+- Email/meeting recency is NOT in this dataset. Never claim an account is MIA or state a last-contact date — if asked, say engagement tracking lives in the Dashboard's Gmail-verified Top Blockers.
+
+BOOK OF BUSINESS (sorted by MRR; "QoQ" = vs ${QOQ_BASELINE_LABEL} close, "last 60d" = movement across the last two closed months):
 ${accountLines}
 
 WRITING STYLE (for any email drafts):
@@ -125,12 +138,12 @@ Be specific, direct, and actionable. Reference actual account names, dollar amou
 // ─── Quick-start prompts ───────────────────────────────────────────────────────
 
 const QUICK_STARTS = [
-  "What's my single best expansion opportunity this week?",
-  "Which MIA accounts are highest risk to my Q2 commission?",
-  "Draft a re-engagement email to my biggest MIA account.",
-  "How am I tracking toward Q2 commission? What's the gap?",
-  "Which 3 accounts should I prioritize for a QBR this month?",
-  "Which partners have no AI products that are good upsell targets?",
+  `What's my single best growth play for ${QUARTER.label}, and why that one first?`,
+  "Build me a plan to reach my next commission tier this quarter.",
+  "Where is my book most at risk this quarter, and what's the counter-move?",
+  "Which 3 partners should get a QBR this month, and what outcome should each drive?",
+  "Which partners without AI products are my best expansion targets, and what's the pitch for each?",
+  "Draft an email to my biggest declining partner that opens a strategy conversation, not a billing one.",
 ];
 
 // ─── Streaming API call ────────────────────────────────────────────────────────
@@ -157,7 +170,7 @@ async function streamChat(
       body: JSON.stringify({
         system_instruction: { parts: [{ text: systemPrompt }] },
         contents,
-        generationConfig: { maxOutputTokens: 1024 },
+        generationConfig: geminiConfig(model, { maxOutputTokens: 2048 }),
       }),
     }
   );
@@ -299,8 +312,8 @@ export default function StrategizeWithMe() {
   const totalMRR = active.reduce((s, a) => s + getLatestMRR(a.revenueHistory), 0);
   const totalBase = active.reduce((s, a) => s + getQoQBaseMRR(a.revenueHistory), 0);
   const qoqPct = pctChange(totalMRR, totalBase);
-  const miaCount = accounts.filter(a => a.isMIA || daysSince(a.lastMeeting) >= 45).length;
-  const noAICount = accounts.filter(a => getLatestMRR(a.revenueHistory) > 0 && aiProductsOf(a).length === 0).length;
+  const decliningCount = active.filter(a => (recentDeltaMRR(a.revenueHistory)?.delta ?? 0) < -1000).length;
+  const noAICount = active.filter(a => aiProductsOf(a).length === 0).length;
 
   const isEmpty = messages.length === 0;
 
@@ -341,9 +354,9 @@ export default function StrategizeWithMe() {
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {[
-                    { label: "Total MRR", value: formatCurrency(totalMRR), sub: `${qoqPct >= 0 ? "+" : ""}${qoqPct}% QoQ` },
+                    { label: "Total MRR", value: formatCurrency(totalMRR), sub: `${qoqPct >= 0 ? "+" : ""}${qoqPct}% vs ${QOQ_BASELINE_LABEL}` },
                     { label: "Active Partners", value: String(active.length), sub: "in book" },
-                    { label: "MIA", value: String(miaCount), sub: "no contact 45d+" },
+                    { label: "Declining", value: String(decliningCount), sub: "down $1K+ in 60d" },
                     { label: "No AI", value: String(noAICount), sub: "expansion targets" },
                   ].map(stat => (
                     <div key={stat.label} className="rounded-lg bg-secondary/60 p-3">

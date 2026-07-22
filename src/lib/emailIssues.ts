@@ -5,7 +5,7 @@
 // inventing problems.
 import type { Account } from "@/data/types";
 import { fetchIssueThreads, GmailAuthError, type IssueThread } from "@/lib/gmail";
-import { ensureGeminiModel } from "@/lib/gemini";
+import { ensureGeminiModel, geminiConfig, geminiText } from "@/lib/gemini";
 
 export type IssueTheme = "product" | "platform" | "service" | "billing";
 
@@ -17,9 +17,10 @@ export interface EmailIssue {
   detail: string;  // what the email said, paraphrased with specifics
 }
 
-// v2: domain-wide search + subjects + per-message snippets (v1 read only
-// contact-of-record thread snippets and missed most flagged issues).
-const CACHE_KEY = "emailIssues:v2";
+// v3: thinking disabled + chunked classification + loud failure on empty
+// responses (v2 could burn its whole output budget on model "thinking",
+// read the empty response as zero issues, and cache that for 24h).
+const CACHE_KEY = "emailIssues:v3";
 const CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 export function loadCachedIssues(): EmailIssue[] | null {
@@ -88,32 +89,44 @@ Rules:
 - title: one short sentence naming the issue. detail: 1-2 sentences with the specifics from the email.
 - Return ONLY valid JSON: {"issues":[{"accountId":"…","theme":"product|platform|service|billing","title":"…","detail":"…"}]}`;
 
+  // Classify in chunks of a few partners per call — one book-wide call blew
+  // the output budget and failed silently. Any chunk failure throws, so a
+  // partial scan is never cached as "no issues".
   const model = await ensureGeminiModel(apiKey);
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      signal,
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        system_instruction: { parts: [{ text: systemPrompt }] },
-        contents: [{ role: "user", parts: [{ text: `Email conversations by partner (each thread: subject + message snippets, oldest→newest):\n${JSON.stringify(entries, null, 1)}` }] }],
-        generationConfig: { responseMimeType: "application/json", maxOutputTokens: 8192 },
-      }),
-    }
-  );
-  if (!res.ok) throw new Error(`Gemini ${res.status}`);
-  const data = await res.json();
-  const parsed = JSON.parse(data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}");
   const nameById = new Map(entries.map(e => [e.accountId, e.accountName]));
   const themes: IssueTheme[] = ["product", "platform", "service", "billing"];
-  return (parsed.issues ?? [])
-    .filter((i: any) => nameById.has(i.accountId) && themes.includes(i.theme) && i.title)
-    .map((i: any) => ({
-      accountId: i.accountId,
-      accountName: nameById.get(i.accountId)!,
-      theme: i.theme,
-      title: String(i.title),
-      detail: String(i.detail ?? ""),
-    }));
+  const CHUNK = 6;
+  const issues: EmailIssue[] = [];
+
+  for (let i = 0; i < entries.length; i += CHUNK) {
+    if (signal?.aborted) throw new DOMException("aborted", "AbortError");
+    const chunk = entries.slice(i, i + CHUNK);
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        signal,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: systemPrompt }] },
+          contents: [{ role: "user", parts: [{ text: `Email conversations by partner (each thread: subject + message snippets, oldest→newest):\n${JSON.stringify(chunk, null, 1)}` }] }],
+          generationConfig: geminiConfig(model, { responseMimeType: "application/json", maxOutputTokens: 8192 }),
+        }),
+      }
+    );
+    if (!res.ok) throw new Error(`Gemini ${res.status}`);
+    const parsed = JSON.parse(geminiText(await res.json()));
+    issues.push(
+      ...(parsed.issues ?? [])
+        .filter((x: any) => nameById.has(x.accountId) && themes.includes(x.theme) && x.title)
+        .map((x: any) => ({
+          accountId: x.accountId,
+          accountName: nameById.get(x.accountId)!,
+          theme: x.theme,
+          title: String(x.title),
+          detail: String(x.detail ?? ""),
+        }))
+    );
+  }
+  return issues;
 }

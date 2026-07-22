@@ -8,7 +8,7 @@ import { useAM } from "@/context/AMContext";
 import { db } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { formatCurrency, commissionableMRR, formatDate } from "@/lib/utils";
-import { ensureGeminiModel } from "@/lib/gemini";
+import { ensureGeminiModel, geminiConfig, geminiText } from "@/lib/gemini";
 import {
   Sparkles, ArrowRight, Target, ChevronDown, ChevronUp,
   ClipboardPaste, Loader2, Lightbulb, AlertCircle, ExternalLink,
@@ -114,15 +114,13 @@ Rules:
       body: JSON.stringify({
         system_instruction: { parts: [{ text: systemPrompt }] },
         contents: [{ role: "user", parts: [{ text: userMessage }] }],
-        generationConfig: { responseMimeType: "application/json", maxOutputTokens: 2048 },
+        generationConfig: geminiConfig(model, { responseMimeType: "application/json", maxOutputTokens: 2048 }),
       }),
     },
   );
 
   if (!res.ok) throw new Error(`Gemini ${res.status}: ${await res.text()}`);
-  const data = await res.json();
-  const jsonText = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
-  return JSON.parse(jsonText) as BriefAnalysis;
+  return JSON.parse(geminiText(await res.json())) as BriefAnalysis;
 }
 
 // ─── Urgency config ───────────────────────────────────────────────────────────
